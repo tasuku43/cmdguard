@@ -13,6 +13,7 @@ func main() {
 		Cwd:           cwd,
 		Home:          home,
 		XDGConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		XDGCacheHome:  os.Getenv("XDG_CACHE_HOME"),
 	}
 	code := cli.Run(os.Args[1:], cli.Streams{
 		Stdin:  os.Stdin,

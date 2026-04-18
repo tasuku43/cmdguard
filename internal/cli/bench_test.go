@@ -10,14 +10,23 @@ import (
 
 func BenchmarkEvaluateRequestWithSmallConfig(b *testing.B) {
 	home := b.TempDir()
+	cacheHome := b.TempDir()
 	writeUserConfigBenchmark(b, home, benchmarkConfig(10, 4))
 	streams := Streams{
 		Stdin:  bytes.NewBuffer(nil),
 		Stdout: bytes.NewBuffer(nil),
 		Stderr: bytes.NewBuffer(nil),
 	}
-	env := Env{Cwd: b.TempDir(), Home: home}
+	env := Env{Cwd: b.TempDir(), Home: home, XDGCacheHome: cacheHome}
 	reqJSON := []byte(`{"action":"exec","command":"git -C repos/foo status"}`)
+
+	if code := Run([]string{"eval", "--format", "json"}, Streams{
+		Stdin:  bytes.NewReader(reqJSON),
+		Stdout: bytes.NewBuffer(nil),
+		Stderr: bytes.NewBuffer(nil),
+	}, env); code != 2 {
+		b.Fatalf("unexpected warmup code %d", code)
+	}
 
 	b.ResetTimer()
 	for b.Loop() {
@@ -36,9 +45,18 @@ func BenchmarkEvaluateRequestWithSmallConfig(b *testing.B) {
 
 func BenchmarkEvaluateRequestWithLargeConfig(b *testing.B) {
 	home := b.TempDir()
+	cacheHome := b.TempDir()
 	writeUserConfigBenchmark(b, home, benchmarkConfig(200, 20))
-	env := Env{Cwd: b.TempDir(), Home: home}
+	env := Env{Cwd: b.TempDir(), Home: home, XDGCacheHome: cacheHome}
 	reqJSON := []byte(`{"action":"exec","command":"git -C repos/foo status"}`)
+
+	if code := Run([]string{"eval", "--format", "json"}, Streams{
+		Stdin:  bytes.NewReader(reqJSON),
+		Stdout: bytes.NewBuffer(nil),
+		Stderr: bytes.NewBuffer(nil),
+	}, env); code != 2 {
+		b.Fatalf("unexpected warmup code %d", code)
+	}
 
 	b.ResetTimer()
 	for b.Loop() {

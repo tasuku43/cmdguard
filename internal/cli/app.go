@@ -31,6 +31,7 @@ type Env struct {
 	Cwd           string
 	Home          string
 	XDGConfigHome string
+	XDGCacheHome  string
 }
 
 func Run(args []string, streams Streams, env Env) int {
@@ -188,7 +189,7 @@ func runInit(args []string, streams Streams, env Env) int {
 }
 
 func evaluateRequest(req input.ExecRequest, format string, streams Streams, env Env) int {
-	loaded := rule.LoadEffectiveForEval(env.Home, env.XDGConfigHome)
+	loaded := rule.LoadEffectiveForEval(env.Home, env.XDGConfigHome, env.XDGCacheHome)
 	if len(loaded.Errors) > 0 {
 		return emitError(streams, format, "invalid_config", strings.Join(rule.ErrorStrings(loaded.Errors), "; "))
 	}

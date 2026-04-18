@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -44,6 +45,20 @@ type evalRuleSpec struct {
 	AllowExampleLen int
 }
 
+type evalCacheFile struct {
+	Version       int              `json:"version"`
+	SourcePath    string           `json:"source_path"`
+	SourceSize    int64            `json:"source_size"`
+	SourceModTime int64            `json:"source_mod_time"`
+	CompiledRules []evalCachedRule `json:"compiled_rules"`
+}
+
+type evalCachedRule struct {
+	ID      string `json:"id"`
+	Pattern string `json:"pattern"`
+	Message string `json:"message"`
+}
+
 type Source struct {
 	Layer string `json:"layer"`
 	Path  string `json:"path"`
@@ -80,12 +95,23 @@ func ConfigPaths(home string, xdgConfigHome string) []Source {
 	}}
 }
 
+func CachePath(home string, xdgCacheHome string) string {
+	cacheBase := xdgCacheHome
+	if cacheBase == "" {
+		cacheBase = filepath.Join(home, ".cache")
+	}
+	return filepath.Join(cacheBase, "cmdguard", "eval-cache-v1.json")
+}
+
 func LoadEffective(cwd string, home string, xdgConfigHome string) Loaded {
 	return loadEffectiveWithLoader(home, xdgConfigHome, LoadFileIfPresent)
 }
 
-func LoadEffectiveForEval(home string, xdgConfigHome string) Loaded {
-	return loadEffectiveWithLoader(home, xdgConfigHome, LoadFileForEvalIfPresent)
+func LoadEffectiveForEval(home string, xdgConfigHome string, xdgCacheHome string) Loaded {
+	loader := func(src Source) ([]Rule, error) {
+		return LoadFileForEvalIfPresent(src, CachePath(home, xdgCacheHome))
+	}
+	return loadEffectiveWithLoader(home, xdgConfigHome, loader)
 }
 
 func loadEffectiveWithLoader(home string, xdgConfigHome string, loader func(Source) ([]Rule, error)) Loaded {
@@ -137,7 +163,18 @@ func LoadFileIfPresent(src Source) ([]Rule, error) {
 	return rules, nil
 }
 
-func LoadFileForEvalIfPresent(src Source) ([]Rule, error) {
+func LoadFileForEvalIfPresent(src Source, cachePath string) ([]Rule, error) {
+	info, err := os.Stat(src.Path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("%s config read failed: %w", src.Layer, err)
+	}
+	if rules, ok := loadEvalCache(src, cachePath, info); ok {
+		return rules, nil
+	}
+
 	data, err := readConfigFile(src)
 	if err != nil {
 		return nil, err
@@ -159,6 +196,7 @@ func LoadFileForEvalIfPresent(src Source) ([]Rule, error) {
 	}
 
 	rules := make([]Rule, 0, len(file.Rules))
+	cached := make([]evalCachedRule, 0, len(file.Rules))
 	for _, spec := range file.Rules {
 		compiled, _ := regexp.Compile(spec.Pattern)
 		rules = append(rules, Rule{
@@ -170,7 +208,19 @@ func LoadFileForEvalIfPresent(src Source) ([]Rule, error) {
 			Source: src,
 			re:     compiled,
 		})
+		cached = append(cached, evalCachedRule{
+			ID:      spec.ID,
+			Pattern: spec.Pattern,
+			Message: spec.Message,
+		})
 	}
+	writeEvalCache(cachePath, evalCacheFile{
+		Version:       1,
+		SourcePath:    src.Path,
+		SourceSize:    info.Size(),
+		SourceModTime: info.ModTime().UnixNano(),
+		CompiledRules: cached,
+	})
 	return rules, nil
 }
 
@@ -417,4 +467,46 @@ func ErrorStrings(errs []error) []string {
 	}
 	slices.Sort(parts)
 	return parts
+}
+
+func loadEvalCache(src Source, cachePath string, info os.FileInfo) ([]Rule, bool) {
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		return nil, false
+	}
+	var cache evalCacheFile
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, false
+	}
+	if cache.Version != 1 || cache.SourcePath != src.Path || cache.SourceSize != info.Size() || cache.SourceModTime != info.ModTime().UnixNano() {
+		return nil, false
+	}
+	rules := make([]Rule, 0, len(cache.CompiledRules))
+	for _, spec := range cache.CompiledRules {
+		compiled, err := regexp.Compile(spec.Pattern)
+		if err != nil {
+			return nil, false
+		}
+		rules = append(rules, Rule{
+			RuleSpec: RuleSpec{
+				ID:      spec.ID,
+				Pattern: spec.Pattern,
+				Message: spec.Message,
+			},
+			Source: src,
+			re:     compiled,
+		})
+	}
+	return rules, true
+}
+
+func writeEvalCache(cachePath string, cache evalCacheFile) {
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+		return
+	}
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(cachePath, data, 0o644)
 }

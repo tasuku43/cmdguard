@@ -52,6 +52,7 @@ rules:
 func TestLoadFileForEvalIfPresentSkipsExamplesButValidates(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cmdguard.yml")
+	cachePath := filepath.Join(t.TempDir(), "eval-cache-v1.json")
 	body := `version: 1
 rules:
   - id: user-rule
@@ -67,7 +68,7 @@ rules:
 		t.Fatal(err)
 	}
 
-	rules, err := LoadFileForEvalIfPresent(Source{Layer: LayerUser, Path: path})
+	rules, err := LoadFileForEvalIfPresent(Source{Layer: LayerUser, Path: path}, cachePath)
 	if err != nil {
 		t.Fatalf("LoadFileForEvalIfPresent() error = %v", err)
 	}
@@ -76,5 +77,8 @@ rules:
 	}
 	if len(rules[0].BlockExamples) != 0 || len(rules[0].AllowExamples) != 0 {
 		t.Fatalf("examples should not be loaded: %+v", rules[0])
+	}
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("expected cache file to be written: %v", err)
 	}
 }
