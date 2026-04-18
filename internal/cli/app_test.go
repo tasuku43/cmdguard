@@ -178,6 +178,60 @@ func TestRunInitCreatesStarterConfig(t *testing.T) {
 	}
 }
 
+func TestRunRootHelpMentionsEditingAndTest(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--help"}, Streams{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: t.TempDir()})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Edit ~/.config/cmdguard/cmdguard.yml") {
+		t.Fatalf("stdout=%q", out)
+	}
+	if !strings.Contains(out, "cmdguard test") {
+		t.Fatalf("stdout=%q", out)
+	}
+}
+
+func TestRunTestHelpMentionsMainAuthoringCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"test", "--help"}, Streams{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: t.TempDir()})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "main command to run after editing rules") {
+		t.Fatalf("stdout=%q", out)
+	}
+}
+
+func TestRunAddGuidancePointsToDirectEditAndTest(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"add"}, Streams{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: t.TempDir()})
+	if code != 1 {
+		t.Fatalf("code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "Edit ~/.config/cmdguard/cmdguard.yml directly") {
+		t.Fatalf("stderr=%q", errOut)
+	}
+	if !strings.Contains(errOut, "cmdguard test") {
+		t.Fatalf("stderr=%q", errOut)
+	}
+}
+
 func TestRunCheckFullGuardDenyCases(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, fullUserConfig)

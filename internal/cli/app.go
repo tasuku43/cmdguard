@@ -36,7 +36,7 @@ type Env struct {
 
 func Run(args []string, streams Streams, env Env) int {
 	if len(args) == 0 {
-		writeErr(streams.Stderr, "usage: cmdguard <eval|check|test|doctor|init|add> [flags]")
+		writeUsage(streams.Stdout)
 		return exitError
 	}
 
@@ -52,10 +52,14 @@ func Run(args []string, streams Streams, env Env) int {
 	case "init":
 		return runInit(args[1:], streams, env)
 	case "add":
-		writeErr(streams.Stderr, "cmdguard add is not implemented yet")
+		writeErr(streams.Stderr, addGuidance())
 		return exitError
 	case "-h", "--help", "help":
-		writeUsage(streams.Stdout)
+		if len(args) > 1 {
+			writeCommandHelp(streams.Stdout, args[1])
+		} else {
+			writeUsage(streams.Stdout)
+		}
 		return exitAllow
 	default:
 		writeErr(streams.Stderr, "unknown command: "+args[0])
@@ -64,9 +68,13 @@ func Run(args []string, streams Streams, env Env) int {
 }
 
 func runEval(args []string, streams Streams, env Env) int {
+	if wantsHelp(args) {
+		writeCommandHelp(streams.Stdout, "eval")
+		return exitAllow
+	}
 	format, rest, err := parseCommonFlags(args)
 	if err != nil || len(rest) != 0 {
-		writeErr(streams.Stderr, "usage: cmdguard eval [--format json]")
+		writeCommandHelp(streams.Stderr, "eval")
 		return exitError
 	}
 	raw, err := io.ReadAll(streams.Stdin)
@@ -82,9 +90,13 @@ func runEval(args []string, streams Streams, env Env) int {
 }
 
 func runCheck(args []string, streams Streams, env Env) int {
+	if wantsHelp(args) {
+		writeCommandHelp(streams.Stdout, "check")
+		return exitAllow
+	}
 	format, rest, err := parseCommonFlags(args)
 	if err != nil || len(rest) == 0 {
-		writeErr(streams.Stderr, "usage: cmdguard check [--format json] <command>")
+		writeCommandHelp(streams.Stderr, "check")
 		return exitError
 	}
 	req := input.ExecRequest{Action: "exec", Command: strings.Join(rest, " ")}
@@ -92,8 +104,12 @@ func runCheck(args []string, streams Streams, env Env) int {
 }
 
 func runTest(args []string, streams Streams, env Env) int {
+	if wantsHelp(args) {
+		writeCommandHelp(streams.Stdout, "test")
+		return exitAllow
+	}
 	if len(args) != 0 {
-		writeErr(streams.Stderr, "usage: cmdguard test")
+		writeCommandHelp(streams.Stderr, "test")
 		return exitError
 	}
 	loaded := rule.LoadEffective(env.Cwd, env.Home, env.XDGConfigHome)
@@ -122,9 +138,13 @@ func runTest(args []string, streams Streams, env Env) int {
 }
 
 func runDoctor(args []string, streams Streams, env Env) int {
+	if wantsHelp(args) {
+		writeCommandHelp(streams.Stdout, "doctor")
+		return exitAllow
+	}
 	format, rest, err := parseCommonFlags(args)
 	if err != nil || len(rest) != 0 {
-		writeErr(streams.Stderr, "usage: cmdguard doctor [--format json]")
+		writeCommandHelp(streams.Stderr, "doctor")
 		return exitError
 	}
 	loaded := rule.LoadEffective(env.Cwd, env.Home, env.XDGConfigHome)
@@ -150,8 +170,12 @@ func runDoctor(args []string, streams Streams, env Env) int {
 }
 
 func runInit(args []string, streams Streams, env Env) int {
+	if wantsHelp(args) {
+		writeCommandHelp(streams.Stdout, "init")
+		return exitAllow
+	}
 	if len(args) != 0 {
-		writeErr(streams.Stderr, "usage: cmdguard init")
+		writeCommandHelp(streams.Stderr, "init")
 		return exitError
 	}
 	configDir := filepath.Join(userConfigBase(env.Home, env.XDGConfigHome), "cmdguard")
@@ -257,7 +281,134 @@ func parseCommonFlags(args []string) (string, []string, error) {
 }
 
 func writeUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: cmdguard <eval|check|test|doctor|init|add> [flags]")
+	fmt.Fprint(w, `cmdguard
+
+Declarative, testable command policy for AI-agent shell commands.
+
+Typical workflow:
+  1. Edit ~/.config/cmdguard/cmdguard.yml
+  2. Add block_examples and allow_examples for every rule
+  3. Run cmdguard test
+  4. Use cmdguard check for spot checks
+  5. Let Claude Code call cmdguard eval from PreToolUse
+
+Usage:
+  cmdguard <command> [flags]
+
+Commands:
+  init     create the user config and print the Claude Code hook snippet
+  test     validate every rule example; this is the main authoring command
+  check    evaluate one command string interactively
+  doctor   inspect config quality and installation state
+  eval     hook entrypoint used by Claude Code and other callers
+
+Help:
+  cmdguard help <command>
+  cmdguard <command> --help
+
+Examples:
+  cmdguard init
+  cmdguard test
+  cmdguard check --format json 'git -C repo status'
+  cmdguard doctor --format json
+`)
+}
+
+func writeCommandHelp(w io.Writer, command string) {
+	switch command {
+	case "init":
+		fmt.Fprint(w, `cmdguard init
+
+Create ~/.config/cmdguard/cmdguard.yml when it does not exist and print the
+Claude Code PreToolUse hook snippet.
+
+Usage:
+  cmdguard init
+
+Typical use:
+  cmdguard init
+`)
+	case "test":
+		fmt.Fprint(w, `cmdguard test
+
+Validate every rule in ~/.config/cmdguard/cmdguard.yml.
+This is the main command to run after editing rules.
+
+Usage:
+  cmdguard test
+
+What it checks:
+  - every block_examples entry matches its rule pattern
+  - every allow_examples entry does not match its rule pattern
+
+Typical use:
+  $EDITOR ~/.config/cmdguard/cmdguard.yml
+  cmdguard test
+`)
+	case "check":
+		fmt.Fprint(w, `cmdguard check
+
+Evaluate one command string against the current rule set.
+Use this while authoring rules before relying on Claude Code hooks.
+
+Usage:
+  cmdguard check [--format json] <command>
+
+Examples:
+  cmdguard check 'git -C repo status'
+  cmdguard check --format json 'AWS_PROFILE=read-only-profile aws s3 ls'
+`)
+	case "doctor":
+		fmt.Fprint(w, `cmdguard doctor
+
+Inspect config validity, rule quality, and Claude Code hook registration.
+
+Usage:
+  cmdguard doctor [--format json]
+
+Examples:
+  cmdguard doctor
+  cmdguard doctor --format json
+`)
+	case "eval":
+		fmt.Fprint(w, `cmdguard eval
+
+Hook entrypoint for Claude Code and other callers.
+Reads stdin JSON and returns allow, deny, or error.
+
+Usage:
+  cmdguard eval [--format json]
+
+Note:
+  You usually do not run this manually. Edit rules and use cmdguard test or
+  cmdguard check instead.
+`)
+	case "add":
+		fmt.Fprint(w, addGuidance()+"\n")
+	default:
+		writeUsage(w)
+	}
+}
+
+func wantsHelp(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+	}
+	return false
+}
+
+func addGuidance() string {
+	return `cmdguard add is intentionally not implemented.
+
+Edit ~/.config/cmdguard/cmdguard.yml directly and then run:
+  cmdguard test
+
+If you use Claude Code, the intended flow is:
+  1. Ask the agent to edit the rule file
+  2. Ask it to run cmdguard test
+  3. Optionally ask it to run cmdguard check for a concrete command`
 }
 
 func writeErr(w io.Writer, msg string) {
