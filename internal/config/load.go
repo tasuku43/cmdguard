@@ -325,6 +325,15 @@ func decodeEvalRewrite(src Source, idx int, node *yaml.Node) (policy.RewriteSpec
 		key := node.Content[i]
 		val := node.Content[i+1]
 		switch key.Value {
+		case "continue":
+			if val.Kind != yaml.ScalarNode {
+				return policy.RewriteSpec{}, fmt.Errorf("%s config %s is invalid: rules[%d].rewrite.continue must be a boolean", src.Layer, src.Path, idx)
+			}
+			var enabled bool
+			if err := val.Decode(&enabled); err != nil {
+				return policy.RewriteSpec{}, fmt.Errorf("%s config %s is invalid: rules[%d].rewrite.continue must be a boolean", src.Layer, src.Path, idx)
+			}
+			rewrite.Continue = enabled
 		case "unwrap_shell_dash_c":
 			if val.Kind != yaml.ScalarNode {
 				return policy.RewriteSpec{}, fmt.Errorf("%s config %s is invalid: rules[%d].rewrite.unwrap_shell_dash_c must be a boolean", src.Layer, src.Path, idx)

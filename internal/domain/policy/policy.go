@@ -31,6 +31,7 @@ type RewriteSpec struct {
 	UnwrapWrapper    UnwrapWrapperSpec `yaml:"unwrap_wrapper" json:"unwrap_wrapper,omitempty"`
 	MoveFlagToEnv    MoveFlagToEnvSpec `yaml:"move_flag_to_env" json:"move_flag_to_env,omitempty"`
 	MoveEnvToFlag    MoveEnvToFlagSpec `yaml:"move_env_to_flag" json:"move_env_to_flag,omitempty"`
+	Continue         bool              `yaml:"continue" json:"continue,omitempty"`
 	Test             RewriteTestSpec   `yaml:"test" json:"test,omitempty"`
 }
 
@@ -99,6 +100,8 @@ type Decision struct {
 	OriginalCommand string
 }
 
+const maxRewritePasses = 4
+
 func NewRule(spec RuleSpec, src Source) Rule {
 	r := Rule{RuleSpec: spec, Source: src}
 	if strings.TrimSpace(spec.Pattern) != "" {
@@ -108,19 +111,45 @@ func NewRule(spec RuleSpec, src Source) Rule {
 }
 
 func Evaluate(rules []Rule, command string) (Decision, error) {
-	for i := range rules {
-		matched, err := rules[i].Match(command)
-		if err != nil {
-			return Decision{}, err
-		}
-		if matched {
-			if rewritten, ok := rules[i].RewriteCommand(command); ok {
+	current := command
+	var lastRewriteRule *Rule
+	for pass := 0; pass < maxRewritePasses; pass++ {
+		restarted := false
+		for i := range rules {
+			matched, err := rules[i].Match(current)
+			if err != nil {
+				return Decision{}, err
+			}
+			if !matched {
+				continue
+			}
+			if !IsZeroRewriteSpec(rules[i].Rewrite) {
+				rewritten, ok := rules[i].RewriteCommand(current)
+				if !ok {
+					continue
+				}
+				if rules[i].Rewrite.Continue {
+					if rewritten == current {
+						return Decision{}, fmt.Errorf("rewrite rule %s produced no-op continue", rules[i].ID)
+					}
+					lastRewriteRule = &rules[i]
+					current = rewritten
+					restarted = true
+					break
+				}
 				return Decision{Outcome: "rewrite", Rule: &rules[i], Command: rewritten, OriginalCommand: command}, nil
 			}
-			return Decision{Outcome: "reject", Rule: &rules[i], Command: command, OriginalCommand: command}, nil
+			return Decision{Outcome: "reject", Rule: &rules[i], Command: current, OriginalCommand: command}, nil
 		}
+		if restarted {
+			continue
+		}
+		if current != command {
+			return Decision{Outcome: "rewrite", Rule: lastRewriteRule, Command: current, OriginalCommand: command}, nil
+		}
+		return Decision{Outcome: "pass", Command: current, OriginalCommand: command}, nil
 	}
-	return Decision{Outcome: "pass", Command: command, OriginalCommand: command}, nil
+	return Decision{}, fmt.Errorf("rewrite evaluation exceeded %d passes", maxRewritePasses)
 }
 
 func (r Rule) Match(command string) (bool, error) {

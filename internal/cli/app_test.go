@@ -195,6 +195,52 @@ rules:
 	}
 }
 
+func TestRunEvalJSONRewriteContinueThenReject(t *testing.T) {
+	home := t.TempDir()
+	writeUserConfig(t, home, `version: 2
+rules:
+  - id: unwrap-shell-dash-c
+    match:
+      command_in: ["bash", "sh"]
+      args_contains: ["-c"]
+    rewrite:
+      unwrap_shell_dash_c: true
+      continue: true
+      test:
+        expect:
+          - in: "bash -c 'git -C repo status'"
+            out: "git -C repo status"
+        pass: ["bash script.sh"]
+  - id: no-git-dash-c
+    match:
+      command: git
+      args_contains: ["-C"]
+    reject:
+      message: "git -C is blocked. Change into the target directory and rerun the command."
+      test:
+        expect: ["git -C repo status"]
+        pass: ["git status"]
+`)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"eval", "--format", "json"}, Streams{
+		Stdin:  strings.NewReader(`{"action":"exec","command":"bash -c 'git -C repo status'"}`),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: home})
+	if code != 2 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v", err)
+	}
+	if payload["decision"] != "reject" || payload["rule_id"] != "no-git-dash-c" {
+		t.Fatalf("payload = %+v", payload)
+	}
+}
+
 func TestRunEvalJSONMoveFlagToEnvRewrite(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, `version: 2

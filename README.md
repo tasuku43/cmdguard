@@ -15,6 +15,7 @@ Typical examples:
 
 - rewrite `aws --profile prod s3 ls` into `AWS_PROFILE=prod aws s3 ls`
 - rewrite `bash -c 'git status'` into `git status`
+- rewrite `bash -c 'git -C repo status'`, then re-evaluate `git -C repo status`
 - reject invocation shapes that must not pass through unchanged
 
 This makes downstream permission systems more predictable, because they evaluate
@@ -33,6 +34,7 @@ Today, the codebase already supports:
 - `rewrite.move_flag_to_env`
 - `rewrite.move_env_to_flag`
 - `rewrite.unwrap_wrapper`
+- `rewrite.continue`
 - ordered first-match evaluation
 - `cmdproxy test`, `cmdproxy check`, `cmdproxy doctor`, and `cmdproxy eval`
 

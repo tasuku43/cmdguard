@@ -71,6 +71,89 @@ func TestEvaluateRewriteRule(t *testing.T) {
 	}
 }
 
+func TestEvaluateRewriteContinueReevaluatesFromTop(t *testing.T) {
+	rules := []Rule{
+		NewRule(RuleSpec{
+			ID: "unwrap-shell-dash-c",
+			Matcher: MatchSpec{
+				CommandIn:    []string{"bash", "sh"},
+				ArgsContains: []string{"-c"},
+			},
+			Rewrite: RewriteSpec{
+				UnwrapShellDashC: true,
+				Continue:         true,
+				Test: RewriteTestSpec{
+					Expect: []RewriteExpectCase{{In: "bash -c 'git -C repo status'", Out: "git -C repo status"}},
+					Pass:   []string{"bash script.sh"},
+				},
+			},
+		}, Source{}),
+		NewRule(RuleSpec{
+			ID: "no-git-dash-c",
+			Matcher: MatchSpec{
+				Command:      "git",
+				ArgsContains: []string{"-C"},
+			},
+			Reject: RejectSpec{
+				Message: "blocked",
+				Test: RejectTestSpec{
+					Expect: []string{"git -C repo status"},
+					Pass:   []string{"git status"},
+				},
+			},
+		}, Source{}),
+	}
+
+	got, err := Evaluate(rules, "bash -c 'git -C repo status'")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "reject" || got.Rule == nil || got.Rule.ID != "no-git-dash-c" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestEvaluateRewriteFailureFallsThrough(t *testing.T) {
+	rules := []Rule{
+		NewRule(RuleSpec{
+			ID: "unwrap-shell-dash-c",
+			Matcher: MatchSpec{
+				CommandIn:    []string{"bash", "sh"},
+				ArgsContains: []string{"-c"},
+			},
+			Rewrite: RewriteSpec{
+				UnwrapShellDashC: true,
+				Test: RewriteTestSpec{
+					Expect: []RewriteExpectCase{{In: "bash -c 'git status'", Out: "git status"}},
+					Pass:   []string{"bash script.sh"},
+				},
+			},
+		}, Source{}),
+		NewRule(RuleSpec{
+			ID: "no-shell-dash-c",
+			Matcher: MatchSpec{
+				CommandIn:    []string{"bash", "sh"},
+				ArgsContains: []string{"-c"},
+			},
+			Reject: RejectSpec{
+				Message: "blocked",
+				Test: RejectTestSpec{
+					Expect: []string{"bash -c 'git status && git diff'"},
+					Pass:   []string{"bash script.sh"},
+				},
+			},
+		}, Source{}),
+	}
+
+	got, err := Evaluate(rules, "bash -c 'git status && git diff'")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "reject" || got.Rule == nil || got.Rule.ID != "no-shell-dash-c" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestEvaluateMoveFlagToEnvRewriteRule(t *testing.T) {
 	rules := []Rule{
 		NewRule(RuleSpec{

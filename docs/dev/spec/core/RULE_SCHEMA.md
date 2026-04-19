@@ -26,6 +26,7 @@ rules:
       move_flag_to_env:
         flag: "--profile"
         env: "AWS_PROFILE"
+      continue: true
       test:
         expect:
           - in: "aws --profile prod s3 ls"
@@ -104,6 +105,11 @@ Currently implemented primitives:
 - `unwrap_shell_dash_c`
 - `unwrap_wrapper`
 
+`rewrite` may also set:
+
+- `continue`: optional boolean, restart evaluation from the beginning after a
+  successful rewrite
+
 Free-form string templates are out of scope.
 
 ### `reject`
@@ -124,6 +130,7 @@ rewrite:
   move_flag_to_env:
     flag: "--profile"
     env: "AWS_PROFILE"
+  continue: true
   test:
     expect:
       - in: "aws --profile prod s3 ls"

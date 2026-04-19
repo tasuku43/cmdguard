@@ -70,7 +70,8 @@ Evaluation order is fixed and deterministic.
 3. Parse and normalize the input invocation
 4. Evaluate rules in order
 5. Apply the first matching directive
-6. If nothing matches, pass the original invocation
+6. If `rewrite.continue: true`, restart evaluation from the top with the rewritten command
+7. If nothing matches, pass the current invocation
 
 ## 7. Rewrite Semantics
 
@@ -97,7 +98,16 @@ The currently implemented rewrite primitives are:
 - `rewrite.unwrap_wrapper`
 
 If a rewrite directive matches but cannot safely transform the invocation, the
-default target behavior is **no-op pass**, not implicit reject.
+default behavior is to continue scanning later rules. It does not implicitly
+become a reject.
+
+`rewrite` may also set:
+
+- `continue: true`
+
+When enabled, a successful rewrite restarts evaluation from the beginning using
+the rewritten command. The implementation guards this loop with a small fixed
+maximum number of rewrite passes.
 
 ## 8. Reject Semantics
 
