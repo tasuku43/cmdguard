@@ -139,6 +139,12 @@ func TestRuleMatchPredicate(t *testing.T) {
 		{command: "bash -c 'echo hi'", want: true},
 		{command: "/usr/bin/env bash -c 'echo hi'", want: true},
 		{command: "command sh -c 'echo hi'", want: true},
+		{command: "sudo bash -c 'echo hi'", want: true},
+		{command: "sudo -u root bash -c 'echo hi'", want: true},
+		{command: "nohup bash -c 'echo hi'", want: true},
+		{command: "timeout 10 bash -c 'echo hi'", want: true},
+		{command: "timeout --signal TERM 10 bash -c 'echo hi'", want: true},
+		{command: "busybox sh -c 'echo hi'", want: true},
 		{command: "bash script.sh", want: false},
 	}
 

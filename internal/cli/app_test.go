@@ -52,6 +52,12 @@ rules:
       - "/usr/bin/env bash -c 'git status'"
       - "command bash -c 'git status'"
       - "exec sh -c 'echo hi'"
+      - "sudo bash -c 'git status'"
+      - "sudo -u root bash -c 'git status'"
+      - "nohup bash -c 'git status'"
+      - "timeout 10 bash -c 'git status'"
+      - "timeout --signal TERM 10 bash -c 'git status'"
+      - "busybox sh -c 'echo hi'"
       - "zsh -c 'echo hi'"
       - "dash -c 'echo hi'"
     allow_examples:
@@ -275,6 +281,12 @@ func TestRunCheckFullGuardDenyCases(t *testing.T) {
 		{name: "env bash dash c", command: "env bash -c 'git status'", wantRuleID: "no-shell-dash-c"},
 		{name: "command bash dash c", command: "command bash -c 'git status'", wantRuleID: "no-shell-dash-c"},
 		{name: "exec sh dash c", command: "exec sh -c 'echo hi'", wantRuleID: "no-shell-dash-c"},
+		{name: "sudo bash dash c", command: "sudo bash -c 'git status'", wantRuleID: "no-shell-dash-c"},
+		{name: "sudo user bash dash c", command: "sudo -u root bash -c 'git status'", wantRuleID: "no-shell-dash-c"},
+		{name: "nohup bash dash c", command: "nohup bash -c 'git status'", wantRuleID: "no-shell-dash-c"},
+		{name: "timeout bash dash c", command: "timeout 10 bash -c 'git status'", wantRuleID: "no-shell-dash-c"},
+		{name: "timeout signal bash dash c", command: "timeout --signal TERM 10 bash -c 'git status'", wantRuleID: "no-shell-dash-c"},
+		{name: "busybox sh dash c", command: "busybox sh -c 'echo hi'", wantRuleID: "no-shell-dash-c"},
 		{name: "zsh dash c", command: "zsh -c 'echo hi'", wantRuleID: "no-shell-dash-c"},
 		{name: "dash dash c", command: "dash -c 'echo hi'", wantRuleID: "no-shell-dash-c"},
 		{name: "aws profile flag", command: "aws --profile read-only-profile s3 ls", wantRuleID: "no-aws-profile-flag"},

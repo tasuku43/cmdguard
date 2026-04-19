@@ -28,6 +28,11 @@ features are post-v1 work.
 Inside `cmdguard`, predicate-based rules are evaluated against an internal
 parsed representation of that command string.
 
+That internal parsing may unwrap a small set of common launcher-style wrappers
+before matcher evaluation, such as `env`, `command`, `exec`, `sudo`, `nohup`,
+`timeout`, and `busybox sh`. This is intentionally heuristic rather than a full
+shell AST.
+
 ## 3. Supported Input
 
 `cmdguard eval` accepts only execution input.

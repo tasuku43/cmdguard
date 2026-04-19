@@ -99,7 +99,7 @@ func unwrapCommand(tokens []string) (string, []string) {
 	for i < len(tokens) {
 		token := basenameCommand(tokens[i])
 		switch token {
-		case "command", "exec":
+		case "command", "exec", "nohup":
 			i++
 			continue
 		case "env":
@@ -108,11 +108,91 @@ func unwrapCommand(tokens []string) (string, []string) {
 				i++
 			}
 			continue
+		case "sudo":
+			i = skipSudoWrapper(tokens, i+1)
+			continue
+		case "timeout":
+			i = skipTimeoutWrapper(tokens, i+1)
+			continue
+		case "busybox":
+			if i+1 < len(tokens) && isShellCommand(tokens[i+1]) {
+				return tokens[i+1], append([]string(nil), tokens[i+2:]...)
+			}
+			return tokens[i], append([]string(nil), tokens[i+1:]...)
 		default:
 			return tokens[i], append([]string(nil), tokens[i+1:]...)
 		}
 	}
 	return "", nil
+}
+
+func skipSudoWrapper(tokens []string, i int) int {
+	for i < len(tokens) {
+		token := tokens[i]
+		if token == "--" {
+			return i + 1
+		}
+		if isEnvAssignment(token) {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(token, "-") || token == "-" {
+			return i
+		}
+		if sudoOptionConsumesValue(token) && i+1 < len(tokens) {
+			i += 2
+			continue
+		}
+		i++
+	}
+	return i
+}
+
+func sudoOptionConsumesValue(token string) bool {
+	switch token {
+	case "-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt", "-r", "--role", "-t", "--type", "-C", "--close-from", "-D", "--chdir":
+		return true
+	}
+	return false
+}
+
+func skipTimeoutWrapper(tokens []string, i int) int {
+	for i < len(tokens) {
+		token := tokens[i]
+		if token == "--" {
+			i++
+			break
+		}
+		if !strings.HasPrefix(token, "-") || token == "-" {
+			break
+		}
+		if timeoutOptionConsumesValue(token) && i+1 < len(tokens) {
+			i += 2
+			continue
+		}
+		i++
+	}
+	if i < len(tokens) {
+		i++
+	}
+	return i
+}
+
+func timeoutOptionConsumesValue(token string) bool {
+	switch token {
+	case "-k", "--kill-after", "-s", "--signal":
+		return true
+	}
+	return false
+}
+
+func isShellCommand(token string) bool {
+	switch basenameCommand(token) {
+	case "bash", "sh", "zsh", "dash", "ksh":
+		return true
+	default:
+		return false
+	}
 }
 
 func basenameCommand(token string) string {
