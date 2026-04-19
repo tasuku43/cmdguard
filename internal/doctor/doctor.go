@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tasuku43/cmdproxy/internal/buildinfo"
 	"github.com/tasuku43/cmdproxy/internal/config"
 	"github.com/tasuku43/cmdproxy/internal/domain/policy"
 )
@@ -77,6 +78,23 @@ func Run(loaded config.Loaded, home string) Report {
 		checks = append(checks, Check{ID: "install.binary-on-path", Category: "install", Status: StatusPass, Message: "cmdproxy found on PATH at " + path})
 	} else {
 		checks = append(checks, Check{ID: "install.binary-on-path", Category: "install", Status: StatusWarn, Message: "cmdproxy not found on PATH"})
+	}
+
+	if exe, err := os.Executable(); err == nil {
+		checks = append(checks, Check{ID: "install.binary-executable", Category: "install", Status: StatusPass, Message: "running binary: " + exe})
+	} else {
+		checks = append(checks, Check{ID: "install.binary-executable", Category: "install", Status: StatusWarn, Message: "running binary path could not be determined"})
+	}
+
+	bi := buildinfo.Read()
+	if bi.VCSRevision != "" {
+		msg := "build metadata available"
+		if bi.VCSModified != "" {
+			msg += " (vcs.modified=" + bi.VCSModified + ")"
+		}
+		checks = append(checks, Check{ID: "install.binary-build-info", Category: "install", Status: StatusPass, Message: msg})
+	} else {
+		checks = append(checks, Check{ID: "install.binary-build-info", Category: "install", Status: StatusWarn, Message: "build metadata missing; prefer binaries built with VCS info embedded"})
 	}
 
 	claudeSettings := filepath.Join(home, ".claude", "settings.json")

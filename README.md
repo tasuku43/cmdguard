@@ -36,7 +36,7 @@ Today, the codebase already supports:
 - `rewrite.unwrap_wrapper`
 - `rewrite.continue`
 - ordered first-match evaluation
-- `cmdproxy test`, `cmdproxy check`, `cmdproxy doctor`, and `cmdproxy hook claude`
+- `cmdproxy test`, `cmdproxy check`, `cmdproxy doctor`, `cmdproxy version`, and `cmdproxy hook claude`
 
 The current on-disk config format uses directive-local tests under
 `rewrite.test` or `reject.test`.
@@ -56,6 +56,7 @@ cmdproxy init
 ```sh
 cmdproxy test
 cmdproxy check aws --profile read-only-profile s3 ls
+cmdproxy version --format json
 cmdproxy doctor --format json
 ```
 
@@ -150,6 +151,7 @@ policy evaluation inside `cmdproxy`.
 ## Documentation
 
 - Product concept: [docs/concepts/product-concept.md](docs/concepts/product-concept.md)
+- Security trust model: [docs/concepts/security-trust-model.md](docs/concepts/security-trust-model.md)
 - Developer spec: [docs/dev/spec/README.md](docs/dev/spec/README.md)
 - User docs: [docs/user/README.md](docs/user/README.md)
 

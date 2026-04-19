@@ -1,0 +1,8 @@
+# Security-sensitive runtime and policy paths
+/internal/cli/ @tasuku43
+/internal/config/ @tasuku43
+/internal/domain/directive/ @tasuku43
+/internal/domain/policy/ @tasuku43
+/internal/buildinfo/ @tasuku43
+/docs/dev/spec/ @tasuku43
+/docs/concepts/security-trust-model.md @tasuku43

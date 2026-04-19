@@ -26,7 +26,7 @@ The starter config should reflect the new product identity.
 
 It should:
 
-- use the current target schema version
+- use the current schema shape without requiring an in-file version field
 - demonstrate at least one structured matcher
 - demonstrate a directive, preferably `rewrite` or `reject`
 - include examples that show the intended rule effect

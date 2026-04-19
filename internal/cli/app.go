@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tasuku43/cmdproxy/internal/buildinfo"
 	"github.com/tasuku43/cmdproxy/internal/config"
 	"github.com/tasuku43/cmdproxy/internal/doctor"
 	"github.com/tasuku43/cmdproxy/internal/domain/policy"
@@ -52,6 +53,8 @@ func Run(args []string, streams Streams, env Env) int {
 		return runDoctor(args[1:], streams, env)
 	case "init":
 		return runInit(args[1:], streams, env)
+	case "version":
+		return runVersion(args[1:], streams)
 	case "-h", "--help", "help":
 		if len(args) > 1 {
 			writeCommandHelp(streams.Stdout, args[1])
@@ -215,6 +218,43 @@ func runInit(args []string, streams Streams, env Env) int {
 
 	fmt.Fprintln(streams.Stdout, "hook snippet:")
 	fmt.Fprintln(streams.Stdout, `{"matcher":"Bash","hooks":[{"type":"command","command":"cmdproxy hook claude --rtk"}]}`)
+	return exitAllow
+}
+
+func runVersion(args []string, streams Streams) int {
+	if wantsHelp(args) {
+		writeCommandHelp(streams.Stdout, "version")
+		return exitAllow
+	}
+	format, rest, err := parseCommonFlags(args)
+	if err != nil || len(rest) != 0 {
+		writeCommandHelp(streams.Stderr, "version")
+		return exitError
+	}
+	info := buildinfo.Read()
+	if format == "json" {
+		enc := json.NewEncoder(streams.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(info); err != nil {
+			writeErr(streams.Stderr, err.Error())
+			return exitError
+		}
+		return exitAllow
+	}
+	fmt.Fprintf(streams.Stdout, "cmdproxy %s\n", info.Version)
+	fmt.Fprintf(streams.Stdout, "module: %s\n", info.Module)
+	if info.GoVersion != "" {
+		fmt.Fprintf(streams.Stdout, "go: %s\n", info.GoVersion)
+	}
+	if info.VCSRevision != "" {
+		fmt.Fprintf(streams.Stdout, "vcs.revision: %s\n", info.VCSRevision)
+	}
+	if info.VCSTime != "" {
+		fmt.Fprintf(streams.Stdout, "vcs.time: %s\n", info.VCSTime)
+	}
+	if info.VCSModified != "" {
+		fmt.Fprintf(streams.Stdout, "vcs.modified: %s\n", info.VCSModified)
+	}
 	return exitAllow
 }
 
@@ -451,6 +491,7 @@ Commands:
   test     validate every rule example; this is the main authoring command
   check    evaluate one command string interactively
   doctor   inspect config quality and installation state
+  version  print build and source metadata for the running binary
   hook     Claude Code hook entrypoint
 
 Help:
@@ -464,6 +505,7 @@ Examples:
   cmdproxy init
   cmdproxy test
   cmdproxy check --format json 'git -C repo status'
+  cmdproxy version --format json
   cmdproxy hook claude --rtk
   cmdproxy doctor --format json
 `)
@@ -542,6 +584,19 @@ Options:
 Note:
   You usually do not run this manually. Edit rules and use cmdproxy test or
   cmdproxy check instead.
+`)
+	case "version":
+		fmt.Fprint(w, `cmdproxy version
+
+Print build metadata for the running binary. Use this to inspect the module,
+Go toolchain, and VCS information embedded in the installed executable.
+
+Usage:
+  cmdproxy version [--format json]
+
+Examples:
+  cmdproxy version
+  cmdproxy version --format json
 `)
 	case "config":
 		fmt.Fprint(w, `cmdproxy help config

@@ -18,7 +18,7 @@ Target doctor checks should be grouped into:
 - `config`: config presence, parseability, schema validity
 - `rules`: matcher validity, directive validity, examples present, examples pass
 - `diagnostics`: likely shadowing, broad regex escape hatches, risky rule order
-- `install`: binary presence and supported hook integration checks
+- `install`: binary presence, build metadata visibility, and supported hook integration checks
 
 ## Role During The Transition
 
@@ -31,3 +31,14 @@ should make the transition visible by flagging:
 
 Warnings remain non-fatal. Hard failures should be reserved for broken config or
 invalid rule definitions.
+
+## Security-oriented Checks
+
+`doctor` should also help users inspect their local trust boundary.
+
+Useful install checks include:
+
+- whether `cmdproxy` is on `PATH`
+- which executable path is currently running
+- whether the binary exposes build metadata such as VCS revision
+- whether Claude Code is wired to `cmdproxy hook claude`

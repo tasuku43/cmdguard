@@ -10,3 +10,5 @@ This directory stores product-level concept documents for `cmdproxy`.
 
 - `docs/concepts/product-concept.md`: core product concept and operator-facing
   value proposition
+- `docs/concepts/security-trust-model.md`: trust boundary, supply-chain risk,
+  and publication-time security stance

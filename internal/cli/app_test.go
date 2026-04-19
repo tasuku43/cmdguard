@@ -161,6 +161,28 @@ func TestRunHookClaudeReject(t *testing.T) {
 	}
 }
 
+func TestRunVersionJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"version", "--format", "json"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v", err)
+	}
+	if payload["module"] != "github.com/tasuku43/cmdproxy" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if _, ok := payload["version"]; !ok {
+		t.Fatalf("payload = %+v", payload)
+	}
+}
+
 func TestRunHookClaudeRewrite(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, `rules:

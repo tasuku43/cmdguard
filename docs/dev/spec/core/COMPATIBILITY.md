@@ -9,14 +9,18 @@ date: 2026-04-18
 ## 1. Scope
 
 This document defines the intended compatibility and distribution stance for
-`cmdproxy` v2-style rule files.
+the current `cmdproxy` rule model.
 
 ## 2. Rule Schema Stability
 
-The current rule schema is `version: 2`.
+The current project intentionally favors a single active schema over explicit
+in-file schema version numbers.
 
-- New features must not silently change the meaning of valid v2 rule files
-- Breaking schema changes require a new version number
+- rule files do not carry a `version` field
+- breaking schema changes should be documented clearly in release notes and
+  migration docs
+- the implementation should reject unknown or invalid shapes rather than guess
+  compatibility behavior
 
 ## 3. Runtime Expectations
 
@@ -34,7 +38,7 @@ The implementation should favor:
 
 ## 4. Distribution Targets
 
-Planned v1 distribution channels are:
+Planned distribution channels are:
 
 - `go install github.com/tasuku43/cmdproxy/cmd/cmdproxy@latest`
 - GitHub Releases
@@ -44,7 +48,7 @@ Additional package managers are post-v1.
 
 ## 5. Platform Stance
 
-v1 should target the major developer platforms used for CLI tooling:
+`cmdproxy` should target the major developer platforms used for CLI tooling:
 
 - macOS
 - Linux
