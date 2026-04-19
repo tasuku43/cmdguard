@@ -81,6 +81,20 @@ If you also use another Bash hook such as `rtk hook claude`, place
 `cmdproxy hook claude` first so canonicalization and rejection happen before later
 hook-side processing.
 
+## Security
+
+`cmdproxy` can rewrite commands immediately before execution, so users should
+treat it as part of their local execution trust boundary.
+
+Before trusting an installed binary:
+
+1. inspect the running binary with `cmdproxy version --format json`
+2. confirm hook wiring with `cmdproxy doctor --format json`
+3. prefer release artifacts with published checksums over opaque local copies
+
+The broader trust model is documented in
+[docs/concepts/security-trust-model.md](docs/concepts/security-trust-model.md).
+
 ## Current Config Shape
 
 The currently implemented config file looks like this:
