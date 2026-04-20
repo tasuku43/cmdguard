@@ -51,6 +51,8 @@ func Run(args []string, streams Streams, env Env) int {
 		return runTest(args[1:], streams, env)
 	case "doctor":
 		return runDoctor(args[1:], streams, env)
+	case "verify":
+		return runVerify(args[1:], streams, env)
 	case "init":
 		return runInit(args[1:], streams, env)
 	case "version":
@@ -178,6 +180,62 @@ func runDoctor(args []string, streams Streams, env Env) int {
 	return exitAllow
 }
 
+func runVerify(args []string, streams Streams, env Env) int {
+	if wantsHelp(args) {
+		writeCommandHelp(streams.Stdout, "verify")
+		return exitAllow
+	}
+	format, rest, err := parseCommonFlags(args)
+	if err != nil || len(rest) != 0 {
+		writeCommandHelp(streams.Stderr, "verify")
+		return exitError
+	}
+	loaded := config.LoadEffective(env.Home, env.XDGConfigHome)
+	report := doctor.Run(loaded, env.Home)
+	info := buildinfo.Read()
+	ok, reasons := verifyStatus(report, info)
+
+	if format == "json" {
+		payload := map[string]any{
+			"verified":   ok,
+			"build_info": info,
+			"report":     report,
+		}
+		if len(reasons) > 0 {
+			payload["failures"] = reasons
+		}
+		enc := json.NewEncoder(streams.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(payload); err != nil {
+			writeErr(streams.Stderr, err.Error())
+			return exitError
+		}
+	} else {
+		fmt.Fprintf(streams.Stdout, "cmdproxy %s\n", info.Version)
+		if info.VCSRevision != "" {
+			fmt.Fprintf(streams.Stdout, "vcs.revision: %s\n", info.VCSRevision)
+		} else {
+			fmt.Fprintln(streams.Stdout, "vcs.revision: <missing>")
+		}
+		for _, check := range report.Checks {
+			fmt.Fprintf(streams.Stdout, "[%s] %s: %s\n", strings.ToUpper(string(check.Status)), check.ID, check.Message)
+		}
+		if ok {
+			fmt.Fprintln(streams.Stdout, "verified: true")
+		} else {
+			fmt.Fprintln(streams.Stdout, "verified: false")
+			for _, reason := range reasons {
+				fmt.Fprintf(streams.Stdout, "failure: %s\n", reason)
+			}
+		}
+	}
+
+	if !ok {
+		return exitError
+	}
+	return exitAllow
+}
+
 func runInit(args []string, streams Streams, env Env) int {
 	if wantsHelp(args) {
 		writeCommandHelp(streams.Stdout, "init")
@@ -256,6 +314,25 @@ func runVersion(args []string, streams Streams) int {
 		fmt.Fprintf(streams.Stdout, "vcs.modified: %s\n", info.VCSModified)
 	}
 	return exitAllow
+}
+
+func verifyStatus(report doctor.Report, info buildinfo.Info) (bool, []string) {
+	var reasons []string
+
+	for _, check := range report.Checks {
+		if check.Status == doctor.StatusFail {
+			reasons = append(reasons, check.ID+": "+check.Message)
+			continue
+		}
+		if check.ID == "install.claude-registered" && check.Status == doctor.StatusWarn && strings.Contains(check.Message, "settings found but") {
+			reasons = append(reasons, check.ID+": "+check.Message)
+		}
+	}
+	if info.VCSRevision == "" {
+		reasons = append(reasons, "build metadata missing: prefer a binary built with embedded VCS info")
+	}
+
+	return len(reasons) == 0, reasons
 }
 
 func evaluateRequest(req input.ExecRequest, format string, streams Streams, env Env) int {
@@ -491,6 +568,7 @@ Commands:
   test     validate every rule example; this is the main authoring command
   check    evaluate one command string interactively
   doctor   inspect config quality and installation state
+  verify   verify local trust-critical setup and build metadata
   version  print build and source metadata for the running binary
   hook     Claude Code hook entrypoint
 
@@ -505,6 +583,7 @@ Examples:
   cmdproxy init
   cmdproxy test
   cmdproxy check --format json 'git -C repo status'
+  cmdproxy verify --format json
   cmdproxy version --format json
   cmdproxy hook claude --rtk
   cmdproxy doctor --format json
@@ -566,6 +645,20 @@ Usage:
 Examples:
   cmdproxy doctor
   cmdproxy doctor --format json
+`)
+	case "verify":
+		fmt.Fprint(w, `cmdproxy verify
+
+Verify the local trust-critical cmdproxy setup.
+This command is stricter than doctor: it fails when the config is broken, when
+Claude settings point somewhere unexpected, or when build metadata is missing.
+
+Usage:
+  cmdproxy verify [--format json]
+
+Examples:
+  cmdproxy verify
+  cmdproxy verify --format json
 `)
 	case "hook":
 		fmt.Fprint(w, `cmdproxy hook claude

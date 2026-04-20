@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/tasuku43/cmdproxy/internal/buildinfo"
+	"github.com/tasuku43/cmdproxy/internal/doctor"
 )
 
 const fullUserConfig = `rules:
@@ -180,6 +183,51 @@ func TestRunVersionJSON(t *testing.T) {
 	}
 	if _, ok := payload["version"]; !ok {
 		t.Fatalf("payload = %+v", payload)
+	}
+}
+
+func TestVerifyStatusFailsWithoutBuildMetadata(t *testing.T) {
+	report := doctor.Report{
+		Checks: []doctor.Check{
+			{ID: "config.parse", Category: "config", Status: doctor.StatusPass, Message: "ok"},
+			{ID: "install.claude-registered", Category: "install", Status: doctor.StatusWarn, Message: "Claude Code settings.json not found"},
+		},
+	}
+	ok, reasons := verifyStatus(report, buildinfo.Info{Version: "dev", Module: "github.com/tasuku43/cmdproxy"})
+	if ok {
+		t.Fatalf("expected verifyStatus to fail")
+	}
+	if len(reasons) == 0 {
+		t.Fatalf("expected failure reasons")
+	}
+}
+
+func TestVerifyStatusFailsWhenClaudeSettingsExistButHookMissing(t *testing.T) {
+	report := doctor.Report{
+		Checks: []doctor.Check{
+			{ID: "config.parse", Category: "config", Status: doctor.StatusPass, Message: "ok"},
+			{ID: "install.claude-registered", Category: "install", Status: doctor.StatusWarn, Message: "Claude Code settings found but cmdproxy hook claude not detected"},
+		},
+	}
+	ok, reasons := verifyStatus(report, buildinfo.Info{Version: "dev", Module: "github.com/tasuku43/cmdproxy", VCSRevision: "abc123"})
+	if ok {
+		t.Fatalf("expected verifyStatus to fail")
+	}
+	if len(reasons) == 0 {
+		t.Fatalf("expected failure reasons")
+	}
+}
+
+func TestVerifyStatusPassesWithBuildMetadataAndNoFatalChecks(t *testing.T) {
+	report := doctor.Report{
+		Checks: []doctor.Check{
+			{ID: "config.parse", Category: "config", Status: doctor.StatusPass, Message: "ok"},
+			{ID: "install.claude-registered", Category: "install", Status: doctor.StatusWarn, Message: "Claude Code settings.json not found"},
+		},
+	}
+	ok, reasons := verifyStatus(report, buildinfo.Info{Version: "dev", Module: "github.com/tasuku43/cmdproxy", VCSRevision: "abc123"})
+	if !ok {
+		t.Fatalf("expected verifyStatus to pass, reasons=%v", reasons)
 	}
 }
 

@@ -49,6 +49,7 @@ The next `cmdproxy` contract prioritizes:
   - `commands/init.md`: setup and starter config behavior
   - `commands/test.md`: rule example verification behavior
   - `commands/doctor.md`: setup and rule health diagnostics
+  - `commands/verify.md`: trust-oriented local verification
   - `commands/version.md`: binary build metadata and provenance visibility
 
 ## Source Of Truth
