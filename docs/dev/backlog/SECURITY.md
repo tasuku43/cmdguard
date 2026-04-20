@@ -103,9 +103,26 @@ user-authored rules.
   - Depends: SECURITY-002
   - Serial: no
 
+- [ ] SECURITY-016: Resolve `GO-2026-4602` in release toolchains
+  - What: update the project's Go toolchain baseline and CI / release runners
+    so release artifacts are built and scanned with a Go version that includes
+    the fix for `GO-2026-4602` (`os`, fixed in Go `1.25.8`).
+  - Why:
+    - GitHub Actions run `24689692027` failed in `govulncheck`
+    - the current code path is reported via `internal/config/load.go`
+  - Specs:
+    - `go.mod`
+    - `Taskfile.yml`
+    - `.github/workflows/ci.yml`
+    - `.github/workflows/security-nightly.yml`
+    - `.github/workflows/release.yml`
+    - `CONTRIBUTING.md`
+  - Depends: SECURITY-005
+  - Serial: yes
+
 ## P1: High priority after release baseline
 
-- [ ] SECURITY-011: `verify` hook-path strictness
+- [x] SECURITY-011: `verify` hook-path strictness
   - What: make `verify` distinguish between acceptable development states and
     suspicious production wiring, including mismatched hook commands and missing
     absolute-path guidance.
