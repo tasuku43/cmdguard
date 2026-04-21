@@ -195,12 +195,28 @@ func runVerify(args []string, streams Streams, env Env) int {
 	report := doctor.Run(loaded, env.Home)
 	info := buildinfo.Read()
 	ok, reasons := verifyStatus(report, info)
+	artifactBuilt := false
+	if ok {
+		for _, src := range config.ConfigPaths(env.Home, env.XDGConfigHome) {
+			rules, err := config.VerifyFileToAllCaches(src, config.HookCacheDirs(env.Home, env.XDGCacheHome), info.Version)
+			if err != nil {
+				ok = false
+				reasons = append(reasons, err.Error())
+				break
+			}
+			if len(rules) > 0 {
+				artifactBuilt = true
+			}
+		}
+	}
 
 	if format == "json" {
 		payload := map[string]any{
-			"verified":   ok,
-			"build_info": info,
-			"report":     report,
+			"verified":       ok,
+			"build_info":     info,
+			"report":         report,
+			"artifact_built": artifactBuilt,
+			"artifact_cache": config.HookCacheDirs(env.Home, env.XDGCacheHome),
 		}
 		if len(reasons) > 0 {
 			payload["failures"] = reasons
@@ -223,6 +239,9 @@ func runVerify(args []string, streams Streams, env Env) int {
 		}
 		if ok {
 			fmt.Fprintln(streams.Stdout, "verified: true")
+			if artifactBuilt {
+				fmt.Fprintf(streams.Stdout, "artifact: %s\n", strings.Join(config.HookCacheDirs(env.Home, env.XDGCacheHome), ", "))
+			}
 		} else {
 			fmt.Fprintln(streams.Stdout, "verified: false")
 			for _, reason := range reasons {
@@ -353,7 +372,14 @@ func evaluateRequest(req input.ExecRequest, format string, streams Streams, env 
 func evaluateDecision(req input.ExecRequest, env Env) (policy.Decision, error) {
 	loaded := config.LoadEffectiveForHook(env.Home, env.XDGConfigHome, env.XDGCacheHome)
 	if len(loaded.Errors) > 0 {
-		return policy.Decision{}, errors.New(strings.Join(policy.ErrorStrings(loaded.Errors), "; "))
+		if shouldAttemptImplicitVerify(loaded.Errors) {
+			if err := ensureVerifiedArtifacts(env); err == nil {
+				loaded = config.LoadEffectiveForHook(env.Home, env.XDGConfigHome, env.XDGCacheHome)
+			}
+		}
+		if len(loaded.Errors) > 0 {
+			return policy.Decision{}, errors.New(strings.Join(policy.ErrorStrings(loaded.Errors), "; "))
+		}
 	}
 
 	decision, err := policy.Evaluate(loaded.Rules, req.Command)
@@ -361,6 +387,28 @@ func evaluateDecision(req input.ExecRequest, env Env) (policy.Decision, error) {
 		return policy.Decision{}, err
 	}
 	return decision, nil
+}
+
+func shouldAttemptImplicitVerify(errs []error) bool {
+	if len(errs) == 0 {
+		return false
+	}
+	for _, msg := range policy.ErrorStrings(errs) {
+		if strings.Contains(msg, "verified artifact not found") || strings.Contains(msg, "changed since last verify") {
+			return true
+		}
+	}
+	return false
+}
+
+func ensureVerifiedArtifacts(env Env) error {
+	info := buildinfo.Read()
+	for _, src := range config.ConfigPaths(env.Home, env.XDGConfigHome) {
+		if _, err := config.VerifyFileToAllCaches(src, config.HookCacheDirs(env.Home, env.XDGCacheHome), info.Version); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func emitDecision(streams Streams, format string, decision policy.Decision) int {

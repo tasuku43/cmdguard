@@ -16,10 +16,10 @@ cmdproxy init
 
 2. Edit `~/.config/cmdproxy/cmdproxy.yml`
 
-3. Validate the config after each change
+3. Verify the config after each change
 
 ```sh
-cmdproxy test
+cmdproxy verify
 cmdproxy doctor --format json
 ```
 
@@ -53,28 +53,26 @@ cmdproxy verify --format json
 
 ## Claude Code
 
-For Claude Code, add `cmdproxy hook claude` as a `PreToolUse` Bash hook.
+For Claude Code, add `cmdproxy hook claude --rtk` as a `PreToolUse` Bash hook.
 
 ```json
 {
   "matcher": "Bash",
   "hooks": [
-    { "type": "command", "command": "cmdproxy hook claude" }
+    { "type": "command", "command": "cmdproxy hook claude --rtk" }
   ]
 }
 ```
 
-If you also use another Bash hook such as `rtk hook claude`, place
-`cmdproxy hook claude` first.
-
-That ordering matters because `cmdproxy` should canonicalize or reject the
-invocation before later hook-side processing and before Claude Code permissions
-evaluate the final command shape.
+`cmdproxy hook claude --rtk` does not depend on Bash hook ordering. It rewrites
+with `cmdproxy`, evaluates Claude permissions against that rewritten command,
+then applies the final `rtk` rewrite before returning `updatedInput`.
 
 ## Current Rule Model
 
 - rules use `match` or `pattern`
 - rules use one directive: `rewrite` or `reject`
+- rewrite rules may opt into `strict: false` for relaxed built-in contracts
 - tests live under the directive
 - `rewrite.test.expect` uses `in` / `out`
 - `reject.test.expect` uses string inputs

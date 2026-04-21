@@ -20,6 +20,7 @@ execution path?**
 `cmdproxy verify` should:
 
 - run the same config and rule validation used by `doctor`
+- compile and write verified hook artifacts for every configured policy file
 - require build metadata to be visible in the current binary
 - fail if Claude Code settings exist but do not point at `cmdproxy hook claude`
 - fail if Claude Code settings use `cmdproxy hook claude` via PATH lookup
@@ -42,6 +43,7 @@ The default output should include:
 - the visible VCS revision or an explicit missing marker
 - the underlying doctor-style checks
 - a final verified true/false result
+- the artifact cache paths when verification also produced executable hook artifacts
 
 ### JSON
 
@@ -51,6 +53,8 @@ The default output should include:
 - `build_info`
 - `report`
 - `failures`
+- `artifact_built`
+- `artifact_cache`
 
 ## Relationship To `doctor`
 
@@ -59,3 +63,11 @@ The default output should include:
 
 `doctor` may emit warnings that are acceptable in development. `verify` should
 promote a smaller set of trust-critical conditions into failures.
+
+## Hook Relationship
+
+`cmdproxy hook claude` reads only verified artifacts at runtime.
+
+- If a verified artifact exists and matches the current config hash, the hook uses it
+- If the config changed and no verified artifact is available, the hook should try an implicit verify once
+- If that implicit verify still fails, the hook must return a deny response with `invalid_config`
