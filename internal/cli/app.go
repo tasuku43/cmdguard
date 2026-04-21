@@ -107,7 +107,11 @@ func runCheck(args []string, streams Streams, env Env) int {
 		return exitError
 	}
 	req := input.ExecRequest{Action: "exec", Command: strings.Join(rest, " ")}
-	return evaluateRequest(req, format, streams, env)
+	decision, err := evaluateDecisionFromSource(req, env)
+	if err != nil {
+		return emitError(streams, format, "runtime_error", err.Error())
+	}
+	return emitDecision(streams, format, decision)
 }
 
 func runTest(args []string, streams Streams, env Env) int {
@@ -119,33 +123,8 @@ func runTest(args []string, streams Streams, env Env) int {
 		writeCommandHelp(streams.Stderr, "test")
 		return exitError
 	}
-	loaded := config.LoadEffective(env.Home, env.XDGConfigHome)
-	if len(loaded.Errors) > 0 {
-		for _, msg := range policy.ErrorStrings(loaded.Errors) {
-			writeErr(streams.Stderr, msg)
-		}
-		return exitError
-	}
-
-	report := doctor.Run(loaded, env.Home)
-	for _, check := range report.Checks {
-		if check.ID == "rules.tests-pass" && check.Status == doctor.StatusFail {
-			writeErr(streams.Stderr, check.Message)
-			return exitError
-		}
-	}
-
-	ruleCount := len(loaded.Rules)
-	testCount := 0
-	for _, r := range loaded.Rules {
-		if strings.TrimSpace(r.Reject.Message) != "" {
-			testCount += len(r.Reject.Test.Expect) + len(r.Reject.Test.Pass)
-			continue
-		}
-		testCount += len(r.Rewrite.Test.Expect) + len(r.Rewrite.Test.Pass)
-	}
-	fmt.Fprintf(streams.Stdout, "ok: %d rules, %d tests checked\n", ruleCount, testCount)
-	return exitAllow
+	writeErr(streams.Stderr, "cmdproxy test is deprecated; run cmdproxy verify instead")
+	return runVerify(nil, streams, env)
 }
 
 func runDoctor(args []string, streams Streams, env Env) int {
@@ -194,12 +173,28 @@ func runVerify(args []string, streams Streams, env Env) int {
 	report := doctor.Run(loaded, env.Home)
 	info := buildinfo.Read()
 	ok, reasons := verifyStatus(report, info)
+	artifactBuilt := false
+	if ok {
+		for _, src := range config.ConfigPaths(env.Home, env.XDGConfigHome) {
+			rules, err := config.VerifyFileToAllCaches(src, config.HookCacheDirs(env.Home, env.XDGCacheHome), info.Version)
+			if err != nil {
+				ok = false
+				reasons = append(reasons, err.Error())
+				break
+			}
+			if len(rules) > 0 {
+				artifactBuilt = true
+			}
+		}
+	}
 
 	if format == "json" {
 		payload := map[string]any{
-			"verified":   ok,
-			"build_info": info,
-			"report":     report,
+			"verified":       ok,
+			"build_info":     info,
+			"report":         report,
+			"artifact_built": artifactBuilt,
+			"artifact_cache": config.HookCacheDirs(env.Home, env.XDGCacheHome),
 		}
 		if len(reasons) > 0 {
 			payload["failures"] = reasons
@@ -222,6 +217,9 @@ func runVerify(args []string, streams Streams, env Env) int {
 		}
 		if ok {
 			fmt.Fprintln(streams.Stdout, "verified: true")
+			if artifactBuilt {
+				fmt.Fprintf(streams.Stdout, "artifact: %s\n", strings.Join(config.HookCacheDirs(env.Home, env.XDGCacheHome), ", "))
+			}
 		} else {
 			fmt.Fprintln(streams.Stdout, "verified: false")
 			for _, reason := range reasons {
@@ -341,18 +339,17 @@ func verifyStatus(report doctor.Report, info buildinfo.Info) (bool, []string) {
 	return len(reasons) == 0, reasons
 }
 
-func evaluateRequest(req input.ExecRequest, format string, streams Streams, env Env) int {
-	decision, err := evaluateDecision(req, env)
-	if err != nil {
-		return emitError(streams, format, "runtime_error", err.Error())
-	}
-	return emitDecision(streams, format, decision)
-}
-
 func evaluateDecision(req input.ExecRequest, env Env) (policy.Decision, error) {
 	loaded := config.LoadEffectiveForHook(env.Home, env.XDGConfigHome, env.XDGCacheHome)
 	if len(loaded.Errors) > 0 {
-		return policy.Decision{}, errors.New(strings.Join(policy.ErrorStrings(loaded.Errors), "; "))
+		if shouldAttemptImplicitVerify(loaded.Errors) {
+			if err := ensureVerifiedArtifacts(env); err == nil {
+				loaded = config.LoadEffectiveForHook(env.Home, env.XDGConfigHome, env.XDGCacheHome)
+			}
+		}
+		if len(loaded.Errors) > 0 {
+			return policy.Decision{}, errors.New(strings.Join(policy.ErrorStrings(loaded.Errors), "; "))
+		}
 	}
 
 	decision, err := policy.Evaluate(loaded.Rules, req.Command)
@@ -360,6 +357,36 @@ func evaluateDecision(req input.ExecRequest, env Env) (policy.Decision, error) {
 		return policy.Decision{}, err
 	}
 	return decision, nil
+}
+
+func evaluateDecisionFromSource(req input.ExecRequest, env Env) (policy.Decision, error) {
+	loaded := config.LoadEffective(env.Home, env.XDGConfigHome)
+	if len(loaded.Errors) > 0 {
+		return policy.Decision{}, errors.New(strings.Join(policy.ErrorStrings(loaded.Errors), "; "))
+	}
+	return policy.Evaluate(loaded.Rules, req.Command)
+}
+
+func shouldAttemptImplicitVerify(errs []error) bool {
+	if len(errs) == 0 {
+		return false
+	}
+	for _, msg := range policy.ErrorStrings(errs) {
+		if strings.Contains(msg, "verified artifact not found") || strings.Contains(msg, "changed since last verify") {
+			return true
+		}
+	}
+	return false
+}
+
+func ensureVerifiedArtifacts(env Env) error {
+	info := buildinfo.Read()
+	for _, src := range config.ConfigPaths(env.Home, env.XDGConfigHome) {
+		if _, err := config.VerifyFileToAllCaches(src, config.HookCacheDirs(env.Home, env.XDGCacheHome), info.Version); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func emitDecision(streams Streams, format string, decision policy.Decision) int {
@@ -562,8 +589,8 @@ Declarative, testable command policy for AI-agent shell commands.
 Typical workflow:
   1. Edit ~/.config/cmdproxy/cmdproxy.yml
   2. Add directive tests under rewrite.test or reject.test
-  3. Run cmdproxy test
-  4. Use cmdproxy check for spot checks
+  3. Run cmdproxy verify
+  4. Use cmdproxy check for spot checks while authoring
   5. Let Claude Code call cmdproxy hook claude --rtk from PreToolUse
 
 Usage:
@@ -571,10 +598,10 @@ Usage:
 
 Commands:
   init     create the user config and print the Claude Code hook snippet
-  test     validate every rule example; this is the main authoring command
+  test     deprecated alias for rule example validation
   check    evaluate one command string interactively
   doctor   inspect config quality and installation state
-  verify   verify local trust-critical setup and build metadata
+  verify   validate rules, verify trust-critical setup, and compile hook artifacts
   version  print build and source metadata for the running binary
   hook     Claude Code hook entrypoint
 
@@ -587,7 +614,7 @@ Help:
 
 Examples:
   cmdproxy init
-  cmdproxy test
+  cmdproxy verify
   cmdproxy check --format json 'git -C repo status'
   cmdproxy verify --format json
   cmdproxy version --format json
@@ -613,19 +640,15 @@ Typical use:
 	case "test":
 		fmt.Fprint(w, `cmdproxy test
 
-Validate every rule in ~/.config/cmdproxy/cmdproxy.yml.
-This is the main command to run after editing rules.
+Deprecated compatibility command.
+Use cmdproxy verify after editing rules.
 
 Usage:
   cmdproxy test
 
-What it checks:
-  - every directive test expect case produces the expected result
-  - every directive test pass case remains pass
-
 Typical use:
   $EDITOR ~/.config/cmdproxy/cmdproxy.yml
-  cmdproxy test
+  cmdproxy verify
 `)
 	case "check":
 		fmt.Fprint(w, `cmdproxy check
@@ -655,9 +678,9 @@ Examples:
 	case "verify":
 		fmt.Fprint(w, `cmdproxy verify
 
-Verify the local trust-critical cmdproxy setup.
-This command is stricter than doctor: it fails when the config is broken, when
-Claude settings point somewhere unexpected, or when build metadata is missing.
+Validate the current config, run embedded rule examples, verify local
+trust-critical setup, and compile the hook runtime artifact.
+hook claude only runs with the last verified artifact.
 
 Usage:
   cmdproxy verify [--format json]
@@ -681,8 +704,8 @@ Options:
           the final rewritten command if it changes
 
 Note:
-  You usually do not run this manually. Edit rules and use cmdproxy test or
-  cmdproxy check instead.
+  You usually do not run this manually. Edit rules, run cmdproxy verify, and
+  use cmdproxy check for spot checks while authoring.
 `)
 	case "version":
 		fmt.Fprint(w, `cmdproxy version
@@ -777,6 +800,8 @@ Supported rewrite primitives:
   - unwrap_wrapper: strip safe wrappers such as env, command, exec, nohup
   - move_flag_to_env: move a flag value into an env assignment
   - move_env_to_flag: move an env assignment into a flag
+  - strict: defaults to true; set strict: false only for relaxed built-in
+            contracts that cmdproxy does not fully guarantee semantically
   - continue: after a successful rewrite, restart evaluation from the top
 
 Example: unwrap shell -c and continue
@@ -801,6 +826,19 @@ Example: move --profile into AWS_PROFILE
           out: "AWS_PROFILE=read-only-profile aws s3 ls"
       pass:
         - "AWS_PROFILE=read-only-profile aws s3 ls"
+
+Example: allow a relaxed built-in mapping
+  rewrite:
+    move_flag_to_env:
+      flag: "--kubeconfig"
+      env: "KUBECONFIG"
+    strict: false
+    test:
+      expect:
+        - in: "kubectl --kubeconfig /tmp/dev-kubeconfig get pods"
+          out: "KUBECONFIG=/tmp/dev-kubeconfig kubectl get pods"
+      pass:
+        - "KUBECONFIG=/tmp/dev-kubeconfig kubectl get pods"
 
 Only one rewrite primitive may be set per rule.
 `)

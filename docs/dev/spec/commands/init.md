@@ -30,7 +30,7 @@ It should:
 - demonstrate at least one structured matcher
 - demonstrate a directive, preferably `rewrite` or `reject`
 - include examples that show the intended rule effect
-- be valid under `cmdproxy test`
+- be valid under `cmdproxy verify`
 
 ## Safety Principle
 

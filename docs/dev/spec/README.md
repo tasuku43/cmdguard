@@ -43,6 +43,7 @@ The next `cmdproxy` contract prioritizes:
   - `core/CONFIG.md`: config locations and invalid-state handling
   - `core/EVALUATION.md`: parse, match, directive application, and pass-through behavior
   - `core/OUTPUT_CONTRACT.md`: output contract for pass, rewrite, reject, and error
+  - `core/VERIFY_ARTIFACT.md`: machine-only runtime artifact produced by `verify`
 - Commands
   - `commands/hook.md`: Claude Code hook entrypoint and hook-specific output contract
   - `commands/check.md`: interactive single-command evaluation

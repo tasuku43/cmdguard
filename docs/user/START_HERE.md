@@ -19,7 +19,7 @@ cmdproxy init
 3. Validate the config after each change
 
 ```sh
-cmdproxy test
+cmdproxy verify
 cmdproxy doctor --format json
 ```
 
@@ -31,6 +31,9 @@ cmdproxy check bash -c 'git status'
 ```
 
 5. Register `cmdproxy hook claude` in your hook runner
+
+`cmdproxy hook claude` only runs with the last verified artifact. If you edit
+`cmdproxy.yml`, the hook hard-fails until you run `cmdproxy verify` again.
 
 ## Verifying an Installed Binary
 

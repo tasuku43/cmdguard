@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tasuku43/cmdproxy/internal/config"
+	"github.com/tasuku43/cmdproxy/internal/domain/policy"
 )
 
 func TestExtractClaudeHookCommandFindsAbsoluteCommand(t *testing.T) {
@@ -56,6 +57,37 @@ func TestRunWarnsWhenClaudeHookTargetIsMissing(t *testing.T) {
 	if !hasCheck(report, "install.claude-hook-target", StatusWarn) {
 		t.Fatalf("report = %+v", report)
 	}
+}
+
+func TestRunWarnsWhenRelaxedContractsAreEnabled(t *testing.T) {
+	report := Run(config.Loaded{
+		Rules: []policy.Rule{
+			policy.NewRule(policy.RuleSpec{
+				ID: "kubectl-kubeconfig-to-env",
+				Matcher: policy.MatchSpec{
+					Command: "kubectl",
+				},
+				Rewrite: policy.RewriteSpec{
+					MoveFlagToEnv: policy.MoveFlagToEnvSpec{
+						Flag: "--kubeconfig",
+						Env:  "KUBECONFIG",
+					},
+					Strict: boolPtr(false),
+					Test: policy.RewriteTestSpec{
+						Expect: []policy.RewriteExpectCase{{In: "kubectl --kubeconfig /tmp/dev get pods", Out: "KUBECONFIG=/tmp/dev kubectl get pods"}},
+						Pass:   []string{"KUBECONFIG=/tmp/dev kubectl get pods"},
+					},
+				},
+			}, policy.Source{Layer: config.LayerUser, Path: "/tmp/cmdproxy.yml"}),
+		},
+	}, t.TempDir())
+	if !hasCheck(report, "rules.relaxed-contracts", StatusWarn) {
+		t.Fatalf("report = %+v", report)
+	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func hasCheck(report Report, id string, status Status) bool {

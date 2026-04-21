@@ -1,7 +1,7 @@
 ---
 title: "cmdproxy hook"
 status: proposed
-date: 2026-04-20
+date: 2026-04-21
 ---
 
 # cmdproxy hook
@@ -28,7 +28,7 @@ The target flow is:
 1. Read stdin fully
 2. Parse Claude Code hook JSON
 3. Normalize the Bash command into an invocation request
-4. Load the effective config
+4. Load the verified runtime artifact for the current config hash
 5. Parse the invocation internally
 6. Evaluate rules using first-match directive semantics, including
    `rewrite.continue`
@@ -50,6 +50,10 @@ The current implementation already supports rewrite outcomes for:
 If a rewrite primitive matches but cannot safely rewrite the invocation,
 evaluation continues and the original command may still pass unless a later
 `reject` rule matches.
+
+If the source config was edited after the last successful `cmdproxy verify`, the
+hook should emit a deny response instructing the caller to run
+`cmdproxy verify`.
 
 ## Notes
 

@@ -97,6 +97,19 @@ examples are:
 These primitives are intended as policy-preserving canonicalization, not as
 free-form command templating.
 
+## 7.1 Support Tiers
+
+`cmdproxy` should expose support depth in tiers rather than imply identical
+semantics for every CLI.
+
+- Tier 1: built-in semantic contracts with explicit meaning-preserving mappings
+- Tier 2: wrapper and shell normalization only
+- Tier 3: no rewrite contract yet; pass or reject only
+
+Early Tier 1 candidates include `aws` and `gh`.
+Early Tier 2 candidates include `git`, `docker`, `kubectl`, `npm`, `pnpm`,
+`yarn`, `terraform`, and `go`.
+
 ## 8. Non-goals
 
 1. Replacing downstream permission engines with a full authorization system

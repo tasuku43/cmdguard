@@ -1,14 +1,15 @@
 ---
 title: "cmdproxy verify"
 status: proposed
-date: 2026-04-20
+date: 2026-04-21
 ---
 
 # cmdproxy verify
 
 ## Purpose
 
-`cmdproxy verify` is a stricter trust-oriented check than `cmdproxy doctor`.
+`cmdproxy verify` is the execution-enabling command for `cmdproxy`.
+It is a stricter trust-oriented check than `cmdproxy doctor`.
 
 It exists to answer a narrower question:
 
@@ -20,6 +21,13 @@ execution path?**
 `cmdproxy verify` should:
 
 - run the same config and rule validation used by `doctor`
+- run embedded directive examples that were previously exposed through
+  the deprecated `cmdproxy test` compatibility command
+- validate built-in rewrite contracts for supported commands such as `aws`,
+  `git`, and `gh`
+- surface warnings when a rule opts into a relaxed built-in contract via
+  `rewrite.strict: false`
+- compile the verified config into a machine-only runtime artifact for hook use
 - require build metadata to be visible in the current binary
 - fail if Claude Code settings exist but do not point at `cmdproxy hook claude`
 - fail if Claude Code settings use `cmdproxy hook claude` via PATH lookup
@@ -31,6 +39,9 @@ execution path?**
 
 It should not require Claude Code to be installed. If no Claude settings file is
 present, that condition should remain informational rather than fatal.
+
+After any source config change, the previous hook artifact is considered stale.
+`cmdproxy hook claude` should hard-fail until `cmdproxy verify` succeeds again.
 
 ## Output
 
@@ -51,6 +62,8 @@ The default output should include:
 - `build_info`
 - `report`
 - `failures`
+- `artifact_built`
+- `artifact_cache`
 
 ## Relationship To `doctor`
 

@@ -105,6 +105,9 @@ Currently implemented primitives:
 
 `rewrite` may also set:
 
+- `strict`: optional boolean, defaults to `true`; set `false` only to allow a
+  relaxed built-in contract that `cmdproxy` does not fully guarantee as
+  meaning-preserving
 - `continue`: optional boolean, restart evaluation from the beginning after a
   successful rewrite
 
@@ -128,6 +131,7 @@ rewrite:
   move_flag_to_env:
     flag: "--profile"
     env: "AWS_PROFILE"
+  strict: true
   continue: true
   test:
     expect:
@@ -139,6 +143,9 @@ rewrite:
 
 - `expect`: required non-empty array of `{in, out}`
 - `pass`: required non-empty string array
+
+`strict: false` is still limited to built-in rewrite primitives and predeclared
+relaxed contracts. It does not enable arbitrary string templating.
 
 ### `reject.test`
 

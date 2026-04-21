@@ -31,6 +31,7 @@ type RewriteSpec struct {
 	UnwrapWrapper    UnwrapWrapperSpec `yaml:"unwrap_wrapper" json:"unwrap_wrapper,omitempty"`
 	MoveFlagToEnv    MoveFlagToEnvSpec `yaml:"move_flag_to_env" json:"move_flag_to_env,omitempty"`
 	MoveEnvToFlag    MoveEnvToFlagSpec `yaml:"move_env_to_flag" json:"move_env_to_flag,omitempty"`
+	Strict           *bool             `yaml:"strict" json:"strict,omitempty"`
 	Continue         bool              `yaml:"continue" json:"continue,omitempty"`
 	Test             RewriteTestSpec   `yaml:"test" json:"test,omitempty"`
 }
@@ -107,6 +108,7 @@ type TraceStep struct {
 	From     string `json:"from,omitempty"`
 	To       string `json:"to,omitempty"`
 	Message  string `json:"message,omitempty"`
+	Relaxed  bool   `json:"relaxed,omitempty"`
 	Continue bool   `json:"continue,omitempty"`
 }
 
@@ -144,6 +146,7 @@ func Evaluate(rules []Rule, command string) (Decision, error) {
 					Action:   "rewrite",
 					From:     current,
 					To:       rewritten,
+					Relaxed:  !RewriteStrict(rules[i].Rewrite),
 					Continue: rules[i].Rewrite.Continue,
 				}
 				trace = append(trace, step)
@@ -412,6 +415,13 @@ func IsZeroRewriteSpec(rewrite RewriteSpec) bool {
 		IsZeroUnwrapWrapperSpec(rewrite.UnwrapWrapper) &&
 		IsZeroMoveFlagToEnvSpec(rewrite.MoveFlagToEnv) &&
 		IsZeroMoveEnvToFlagSpec(rewrite.MoveEnvToFlag)
+}
+
+func RewriteStrict(rewrite RewriteSpec) bool {
+	if rewrite.Strict == nil {
+		return true
+	}
+	return *rewrite.Strict
 }
 
 func IsZeroMoveFlagToEnvSpec(spec MoveFlagToEnvSpec) bool {

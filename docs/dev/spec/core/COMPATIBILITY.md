@@ -56,3 +56,14 @@ Additional package managers are post-v1.
 
 The exact release matrix is an implementation detail, but the user-facing docs
 should describe the supported installation paths clearly.
+
+## 6. Contract Surface Stance
+
+`cmdproxy` should distinguish between command presence and contract depth.
+
+- adding a CLI to the contract registry does not imply full semantic rewriting
+- Tier 1 command contracts may support narrow documented meaning-preserving
+  mappings
+- Tier 2 command contracts may support only wrapper and shell normalization
+- semantic mappings should expand conservatively and rely on documented CLI
+  surface area

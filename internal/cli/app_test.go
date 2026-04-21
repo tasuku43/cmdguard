@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/tasuku43/cmdproxy/internal/buildinfo"
+	"github.com/tasuku43/cmdproxy/internal/config"
 	"github.com/tasuku43/cmdproxy/internal/doctor"
 )
 
@@ -137,6 +138,7 @@ func TestRunHookClaudeReject(t *testing.T) {
         expect: ["git -C foo status"]
         pass: ["git status"]
 `)
+	verifyUserConfig(t, home)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"hook", "claude"}, Streams{
@@ -282,6 +284,7 @@ func TestRunHookClaudeRewrite(t *testing.T) {
             out: "git status"
         pass: ["bash script.sh"]
 `)
+	verifyUserConfig(t, home)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"hook", "claude"}, Streams{
@@ -346,6 +349,7 @@ func TestRunHookClaudeRewriteContinueThenReject(t *testing.T) {
         expect: ["git -C repo status"]
         pass: ["git status"]
 `)
+	verifyUserConfig(t, home)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"hook", "claude"}, Streams{
@@ -395,6 +399,7 @@ func TestRunHookClaudeMoveFlagToEnvRewrite(t *testing.T) {
             out: "AWS_PROFILE=read-only-profile aws s3 ls"
         pass: ["AWS_PROFILE=read-only-profile aws s3 ls"]
 `)
+	verifyUserConfig(t, home)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"hook", "claude"}, Streams{
@@ -423,6 +428,54 @@ func TestRunHookClaudeMoveFlagToEnvRewrite(t *testing.T) {
 	}
 }
 
+func TestRunHookClaudeMoveFlagToEnvRewriteMarksRelaxedTrace(t *testing.T) {
+	home := t.TempDir()
+	writeUserConfig(t, home, `rules:
+  - id: kubectl-kubeconfig-to-env
+    match:
+      command: kubectl
+      args_contains: ["--kubeconfig"]
+    rewrite:
+      move_flag_to_env:
+        flag: "--kubeconfig"
+        env: "KUBECONFIG"
+      strict: false
+      test:
+        expect:
+          - in: "kubectl --kubeconfig /tmp/dev-kubeconfig get pods"
+            out: "KUBECONFIG=/tmp/dev-kubeconfig kubectl get pods"
+        pass: ["KUBECONFIG=/tmp/dev-kubeconfig kubectl get pods"]
+`)
+	verifyUserConfig(t, home)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hook", "claude"}, Streams{
+		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"kubectl --kubeconfig /tmp/dev-kubeconfig get pods"}}`),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: home})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v", err)
+	}
+	cmdproxyOut, ok := payload["cmdproxy"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload = %+v", payload)
+	}
+	trace, ok := cmdproxyOut["trace"].([]any)
+	if !ok || len(trace) != 1 {
+		t.Fatalf("payload = %+v", payload)
+	}
+	step, ok := trace[0].(map[string]any)
+	if !ok || step["relaxed"] != true {
+		t.Fatalf("payload = %+v", payload)
+	}
+}
+
 func TestRunHookClaudeMoveEnvToFlagRewrite(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, `rules:
@@ -440,6 +493,7 @@ func TestRunHookClaudeMoveEnvToFlagRewrite(t *testing.T) {
             out: "aws --profile read-only-profile s3 ls"
         pass: ["aws --profile read-only-profile s3 ls"]
 `)
+	verifyUserConfig(t, home)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"hook", "claude"}, Streams{
@@ -479,6 +533,7 @@ func TestRunHookClaudeUnwrapWrapperRewrite(t *testing.T) {
             out: "AWS_PROFILE=dev aws s3 ls"
         pass: ["AWS_PROFILE=dev aws s3 ls"]
 `)
+	verifyUserConfig(t, home)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"hook", "claude"}, Streams{
@@ -521,6 +576,7 @@ func TestRunHookClaudeWithRTKOptionAppliesFinalRewrite(t *testing.T) {
             out: "AWS_PROFILE=read-only-profile aws s3 ls"
         pass: ["AWS_PROFILE=read-only-profile aws s3 ls"]
 `)
+	verifyUserConfig(t, home)
 	binDir := t.TempDir()
 	rtkPath := filepath.Join(binDir, "rtk")
 	script := "#!/bin/sh\nif [ \"$1\" = \"rewrite\" ] && [ \"$2\" = \"AWS_PROFILE=read-only-profile aws s3 ls\" ]; then\n  printf 'rtk aws s3 ls\\n'\n  exit 3\nfi\nexit 1\n"
@@ -591,6 +647,50 @@ func TestRunCheckAllow(t *testing.T) {
 	}
 }
 
+func TestRunHookClaudeImplicitlyVerifiesWhenArtifactMissing(t *testing.T) {
+	home := t.TempDir()
+	writeUserConfig(t, home, `rules:
+  - id: unwrap-shell-dash-c
+    match:
+      command_in: ["bash", "sh"]
+      args_contains: ["-c"]
+    rewrite:
+      unwrap_shell_dash_c: true
+      test:
+        expect:
+          - in: "bash -c 'git status'"
+            out: "git status"
+        pass: ["bash script.sh"]
+`)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hook", "claude"}, Streams{
+		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"bash -c 'git status'"}}`),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: home})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v", err)
+	}
+	hookOut, ok := payload["hookSpecificOutput"].(map[string]any)
+	if !ok || hookOut["permissionDecision"] != "allow" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	updatedInput, ok := hookOut["updatedInput"].(map[string]any)
+	if !ok || updatedInput["command"] != "git status" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	entries, err := os.ReadDir(config.HookCacheDir(home, ""))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("expected implicit verify artifact, err=%v entries=%v", err, entries)
+	}
+}
+
 func TestRunTest(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, `rules:
@@ -609,11 +709,33 @@ func TestRunTest(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}, Env{Cwd: t.TempDir(), Home: home})
+	if code == 0 {
+		t.Fatalf("expected test compatibility command to fail without build metadata; stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "verified: false") {
+		t.Fatalf("stdout=%q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "build metadata missing") {
+		t.Fatalf("stdout=%q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "deprecated") {
+		t.Fatalf("stderr=%q", stderr.String())
+	}
+}
+
+func TestRunTestHelpMentionsVerify(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"test", "--help"}, Streams{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: t.TempDir()})
 	if code != 0 {
 		t.Fatalf("code = %d stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "ok: 1 rules, 2 tests checked") {
-		t.Fatalf("stdout=%q", stdout.String())
+	out := stdout.String()
+	if !strings.Contains(out, "Use cmdproxy verify") {
+		t.Fatalf("stdout=%q", out)
 	}
 }
 
@@ -652,26 +774,10 @@ func TestRunRootHelpMentionsEditingAndTest(t *testing.T) {
 	if !strings.Contains(out, "Edit ~/.config/cmdproxy/cmdproxy.yml") {
 		t.Fatalf("stdout=%q", out)
 	}
-	if !strings.Contains(out, "cmdproxy test") {
+	if !strings.Contains(out, "cmdproxy verify") {
 		t.Fatalf("stdout=%q", out)
 	}
 	if !strings.Contains(out, "cmdproxy help config") {
-		t.Fatalf("stdout=%q", out)
-	}
-}
-
-func TestRunTestHelpMentionsMainAuthoringCommand(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"test", "--help"}, Streams{
-		Stdin:  strings.NewReader(""),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	}, Env{Cwd: t.TempDir(), Home: t.TempDir()})
-	if code != 0 {
-		t.Fatalf("code = %d stderr=%s", code, stderr.String())
-	}
-	out := stdout.String()
-	if !strings.Contains(out, "main command to run after editing rules") {
 		t.Fatalf("stdout=%q", out)
 	}
 }
@@ -827,6 +933,14 @@ func writeUserConfig(t *testing.T, home string, body string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func verifyUserConfig(t *testing.T, home string) {
+	t.Helper()
+	path := filepath.Join(home, ".config", "cmdproxy", "cmdproxy.yml")
+	if _, err := config.VerifyFile(config.Source{Layer: config.LayerUser, Path: path}, config.HookCacheDir(home, ""), "test"); err != nil {
 		t.Fatal(err)
 	}
 }

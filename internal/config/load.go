@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/tasuku43/cmdproxy/internal/contract"
 	"github.com/tasuku43/cmdproxy/internal/domain/policy"
 	"gopkg.in/yaml.v3"
 )
@@ -42,10 +44,12 @@ type evalRuleSpec struct {
 }
 
 type evalCacheFile struct {
-	Version       int              `json:"version"`
-	SourcePath    string           `json:"source_path"`
-	SourceHash    string           `json:"source_hash"`
-	CompiledRules []evalCachedRule `json:"compiled_rules"`
+	Version         int              `json:"version"`
+	SourcePath      string           `json:"source_path"`
+	SourceHash      string           `json:"source_hash"`
+	CmdproxyVersion string           `json:"cmdproxy_version,omitempty"`
+	VerifiedAt      string           `json:"verified_at,omitempty"`
+	CompiledRules   []evalCachedRule `json:"compiled_rules"`
 }
 
 type evalCachedRule struct {
@@ -68,11 +72,31 @@ func ConfigPaths(home string, xdgConfigHome string) []Source {
 }
 
 func HookCacheDir(home string, xdgCacheHome string) string {
-	cacheBase := xdgCacheHome
-	if cacheBase == "" {
-		cacheBase = filepath.Join(home, ".cache")
+	dirs := HookCacheDirs(home, xdgCacheHome)
+	if len(dirs) == 0 {
+		return filepath.Join(home, ".cache", "cmdproxy")
 	}
-	return filepath.Join(cacheBase, "cmdproxy")
+	return dirs[0]
+}
+
+func HookCacheDirs(home string, xdgCacheHome string) []string {
+	seen := map[string]struct{}{}
+	var dirs []string
+	add := func(base string) {
+		if strings.TrimSpace(base) == "" {
+			return
+		}
+		path := filepath.Join(base, "cmdproxy")
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		dirs = append(dirs, path)
+	}
+	add(filepath.Join(os.TempDir(), "cmdproxy-"+shortHash(home)))
+	add(filepath.Join(home, ".cache"))
+	add(xdgCacheHome)
+	return dirs
 }
 
 func LoadEffective(home string, xdgConfigHome string) Loaded {
@@ -81,7 +105,7 @@ func LoadEffective(home string, xdgConfigHome string) Loaded {
 
 func LoadEffectiveForHook(home string, xdgConfigHome string, xdgCacheHome string) Loaded {
 	loader := func(src Source) ([]policy.Rule, error) {
-		return LoadFileForEvalIfPresent(src, HookCacheDir(home, xdgCacheHome))
+		return LoadVerifiedFileForHook(src, HookCacheDirs(home, xdgCacheHome))
 	}
 	return loadEffectiveWithLoader(home, xdgConfigHome, loader)
 }
@@ -131,6 +155,42 @@ func LoadFileIfPresent(src Source) ([]policy.Rule, error) {
 }
 
 func LoadFileForEvalIfPresent(src Source, cacheDir string) ([]policy.Rule, error) {
+	return loadFileForEval(src, cacheDir, false, "")
+}
+
+func LoadVerifiedFileForHook(src Source, cacheDirs []string) ([]policy.Rule, error) {
+	return loadVerifiedFileForHook(src, cacheDirs)
+}
+
+func VerifyFile(src Source, cacheDir string, cmdproxyVersion string) ([]policy.Rule, error) {
+	return compileAndWriteEvalFile(src, cacheDir, cmdproxyVersion)
+}
+
+func VerifyFileToAllCaches(src Source, cacheDirs []string, cmdproxyVersion string) ([]policy.Rule, error) {
+	var rules []policy.Rule
+	var errs []string
+	success := false
+	for i, cacheDir := range cacheDirs {
+		loadedRules, err := compileAndWriteEvalFile(src, cacheDir, cmdproxyVersion)
+		if err != nil {
+			errs = append(errs, err.Error())
+			continue
+		}
+		if !success || i == 0 {
+			rules = loadedRules
+		}
+		success = true
+	}
+	if !success {
+		if len(errs) == 0 {
+			return nil, fmt.Errorf("failed to write verified artifacts")
+		}
+		return nil, errors.New(strings.Join(errs, "; "))
+	}
+	return rules, nil
+}
+
+func loadFileForEval(src Source, cacheDir string, requireVerified bool, cmdproxyVersion string) ([]policy.Rule, error) {
 	data, err := readConfigFile(src)
 	if err != nil {
 		return nil, err
@@ -140,9 +200,28 @@ func LoadFileForEvalIfPresent(src Source, cacheDir string) ([]policy.Rule, error
 	}
 	sourceHash := contentHash(data)
 	cachePath := cachePathForHash(cacheDir, sourceHash)
-	if rules, ok := loadEvalCache(src, cachePath, sourceHash); ok {
+	if rules, ok := loadEvalCache(src, cachePath, sourceHash, requireVerified); ok {
 		return rules, nil
 	}
+	if requireVerified {
+		return nil, fmt.Errorf("%s config %s changed since last verify; run cmdproxy verify", src.Layer, src.Path)
+	}
+	return compileEvalData(src, cacheDir, cmdproxyVersion, data, sourceHash)
+}
+
+func compileAndWriteEvalFile(src Source, cacheDir string, cmdproxyVersion string) ([]policy.Rule, error) {
+	data, err := readConfigFile(src)
+	if err != nil {
+		return nil, err
+	}
+	if data == "" {
+		return nil, nil
+	}
+	sourceHash := contentHash(data)
+	return compileEvalData(src, cacheDir, cmdproxyVersion, data, sourceHash)
+}
+
+func compileEvalData(src Source, cacheDir string, cmdproxyVersion string, data string, sourceHash string) ([]policy.Rule, error) {
 	file, err := decodeEvalFile(src, data)
 	if err != nil {
 		return nil, err
@@ -173,14 +252,37 @@ func LoadFileForEvalIfPresent(src Source, cacheDir string) ([]policy.Rule, error
 			Rewrite: spec.Rewrite,
 		})
 	}
-	writeEvalCache(cachePath, evalCacheFile{
-		Version:       1,
-		SourcePath:    src.Path,
-		SourceHash:    sourceHash,
-		CompiledRules: cached,
-	})
+	cachePath := cachePathForHash(cacheDir, sourceHash)
+	if err := writeEvalCache(cachePath, evalCacheFile{
+		Version:         1,
+		SourcePath:      src.Path,
+		SourceHash:      sourceHash,
+		CmdproxyVersion: cmdproxyVersion,
+		VerifiedAt:      time.Now().UTC().Format(time.RFC3339),
+		CompiledRules:   cached,
+	}); err != nil {
+		return nil, err
+	}
 	pruneOldEvalCaches(cacheDir, cachePath)
 	return rules, nil
+}
+
+func loadVerifiedFileForHook(src Source, cacheDirs []string) ([]policy.Rule, error) {
+	data, err := readConfigFile(src)
+	if err != nil {
+		return nil, err
+	}
+	if data == "" {
+		return nil, nil
+	}
+	sourceHash := contentHash(data)
+	for _, cacheDir := range cacheDirs {
+		cachePath := cachePathForHash(cacheDir, sourceHash)
+		if rules, ok := loadEvalCache(src, cachePath, sourceHash, true); ok {
+			return rules, nil
+		}
+	}
+	return nil, fmt.Errorf("%s config %s changed since last verify; verified artifact not found in %s; run cmdproxy verify", src.Layer, src.Path, strings.Join(cacheDirs, ", "))
 }
 
 func cachePathForHash(cacheDir string, sourceHash string) string {
@@ -328,6 +430,15 @@ func decodeEvalRewrite(src Source, idx int, node *yaml.Node) (policy.RewriteSpec
 				return policy.RewriteSpec{}, fmt.Errorf("%s config %s is invalid: rules[%d].rewrite.continue must be a boolean", src.Layer, src.Path, idx)
 			}
 			rewrite.Continue = enabled
+		case "strict":
+			if val.Kind != yaml.ScalarNode {
+				return policy.RewriteSpec{}, fmt.Errorf("%s config %s is invalid: rules[%d].rewrite.strict must be a boolean", src.Layer, src.Path, idx)
+			}
+			var enabled bool
+			if err := val.Decode(&enabled); err != nil {
+				return policy.RewriteSpec{}, fmt.Errorf("%s config %s is invalid: rules[%d].rewrite.strict must be a boolean", src.Layer, src.Path, idx)
+			}
+			rewrite.Strict = &enabled
 		case "unwrap_shell_dash_c":
 			if val.Kind != yaml.ScalarNode {
 				return policy.RewriteSpec{}, fmt.Errorf("%s config %s is invalid: rules[%d].rewrite.unwrap_shell_dash_c must be a boolean", src.Layer, src.Path, idx)
@@ -634,6 +745,7 @@ func validateFile(file File) []string {
 		issues = append(issues, "rules must be non-empty")
 	}
 	issues = append(issues, policy.ValidateRules(file.Rules)...)
+	issues = append(issues, contract.ValidateRules(file.Rules)...)
 	return issues
 }
 
@@ -655,10 +767,21 @@ func validateEvalFile(file evalFile) []string {
 		issues = append(issues, policy.ValidateRuleMatcher(prefix, r.Pattern, r.Match)...)
 		issues = append(issues, policy.ValidateDirective(prefix, r.Reject, r.Rewrite)...)
 	}
+	rules := make([]policy.RuleSpec, 0, len(file.Rules))
+	for _, rule := range file.Rules {
+		rules = append(rules, policy.RuleSpec{
+			ID:      rule.ID,
+			Pattern: rule.Pattern,
+			Matcher: rule.Match,
+			Reject:  rule.Reject,
+			Rewrite: rule.Rewrite,
+		})
+	}
+	issues = append(issues, contract.ValidateRules(rules)...)
 	return issues
 }
 
-func loadEvalCache(src Source, cachePath string, sourceHash string) ([]policy.Rule, bool) {
+func loadEvalCache(src Source, cachePath string, sourceHash string, requireVerified bool) ([]policy.Rule, bool) {
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		return nil, false
@@ -668,6 +791,9 @@ func loadEvalCache(src Source, cachePath string, sourceHash string) ([]policy.Ru
 		return nil, false
 	}
 	if cache.Version != 1 || cache.SourcePath != src.Path || cache.SourceHash != sourceHash {
+		return nil, false
+	}
+	if requireVerified && (strings.TrimSpace(cache.CmdproxyVersion) == "" || strings.TrimSpace(cache.VerifiedAt) == "") {
 		return nil, false
 	}
 	rules := make([]policy.Rule, 0, len(cache.CompiledRules))
@@ -688,15 +814,15 @@ func loadEvalCache(src Source, cachePath string, sourceHash string) ([]policy.Ru
 	return rules, true
 }
 
-func writeEvalCache(cachePath string, cache evalCacheFile) {
+func writeEvalCache(cachePath string, cache evalCacheFile) error {
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		return
+		return err
 	}
 	data, err := json.Marshal(cache)
 	if err != nil {
-		return
+		return err
 	}
-	_ = os.WriteFile(cachePath, data, 0o644)
+	return os.WriteFile(cachePath, data, 0o644)
 }
 
 func pruneOldEvalCaches(cacheDir string, keepPath string) {
@@ -718,4 +844,9 @@ func pruneOldEvalCaches(cacheDir string, keepPath string) {
 		}
 		_ = os.Remove(path)
 	}
+}
+
+func shortHash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])[:12]
 }

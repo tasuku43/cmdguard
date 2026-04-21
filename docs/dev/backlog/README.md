@@ -14,5 +14,6 @@ tasks.
 
 ## Files
 
+- `docs/dev/backlog/CONTRACTS.md`: built-in command contract expansion backlog
 - `docs/dev/backlog/SECURITY.md`: security and trust-boundary backlog for
   publication and ongoing maintenance
