@@ -72,6 +72,7 @@ Supported fields:
 
 - `command`
 - `command_in`
+- `command_is_absolute_path`
 - `subcommand`
 - `args_contains`
 - `args_prefixes`
@@ -102,11 +103,16 @@ Currently implemented primitives:
 - `move_env_to_flag`
 - `unwrap_shell_dash_c`
 - `unwrap_wrapper`
+- `strip_command_path`
 
 `rewrite` may also set:
 
 - `continue`: optional boolean, restart evaluation from the beginning after a
   successful rewrite
+- `strict`: optional boolean, defaults to `true`
+  - `strict: true` uses only product-guaranteed built-in contracts
+  - `strict: false` allows relaxed built-in contracts such as
+    `kubectl --kubeconfig <-> KUBECONFIG`
 
 Free-form string templates are out of scope.
 
@@ -128,6 +134,7 @@ rewrite:
   move_flag_to_env:
     flag: "--profile"
     env: "AWS_PROFILE"
+  strict: true
   continue: true
   test:
     expect:
@@ -162,6 +169,7 @@ Validation is strict and aggregate.
 - parsing should report all discovered schema issues in one run
 - invalid matcher combinations are validation errors
 - invalid directive payloads are validation errors
+- unsupported built-in rewrite contracts are validation errors
 - missing tests are validation errors
 - empty or ambiguous rules are validation errors
 

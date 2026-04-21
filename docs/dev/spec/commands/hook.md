@@ -28,7 +28,7 @@ The target flow is:
 1. Read stdin fully
 2. Parse Claude Code hook JSON
 3. Normalize the Bash command into an invocation request
-4. Load the effective config
+4. Load the verified artifact for the effective config
 5. Parse the invocation internally
 6. Evaluate rules using first-match directive semantics, including
    `rewrite.continue`
@@ -46,10 +46,24 @@ The current implementation already supports rewrite outcomes for:
 - `rewrite.move_flag_to_env`
 - `rewrite.move_env_to_flag`
 - `rewrite.unwrap_wrapper`
+- `rewrite.strip_command_path`
 
 If a rewrite primitive matches but cannot safely rewrite the invocation,
 evaluation continues and the original command may still pass unless a later
 `reject` rule matches.
+
+## Claude Permission Carryover
+
+When `cmdproxy hook claude --rtk` is used, the runtime order is:
+
+1. evaluate `cmdproxy`
+2. if needed, rewrite into the post-`cmdproxy` command
+3. evaluate Claude permissions against that post-`cmdproxy` command
+4. apply the final `rtk` rewrite
+5. emit the final `updatedInput.command`
+
+This preserves permission intent even when external Bash hooks are not executed
+serially.
 
 ## Notes
 

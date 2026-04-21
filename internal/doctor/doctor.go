@@ -63,6 +63,12 @@ func Run(loaded config.Loaded, home string) Report {
 		checks = append(checks, Check{ID: "rules.tests-pass", Category: "rules", Status: StatusFail, Message: "skipped because configuration is invalid"})
 	}
 
+	if ids := relaxedRuleIDs(loaded.Rules); len(ids) > 0 {
+		checks = append(checks, Check{ID: "rules.relaxed-contracts", Category: "rules", Status: StatusWarn, Message: "relaxed rewrite contracts enabled: " + strings.Join(ids, ", ")})
+	} else {
+		checks = append(checks, Check{ID: "rules.relaxed-contracts", Category: "rules", Status: StatusPass, Message: "all rewrite contracts use strict validation"})
+	}
+
 	if warning := broadnessWarning(loaded.Rules); warning != "" {
 		checks = append(checks, Check{ID: "rules.pattern-broadness", Category: "diagnostics", Status: StatusWarn, Message: warning})
 	} else {
@@ -291,4 +297,14 @@ func shadowingWarning(rules []policy.Rule) string {
 		}
 	}
 	return ""
+}
+
+func relaxedRuleIDs(rules []policy.Rule) []string {
+	var ids []string
+	for _, rule := range rules {
+		if !policy.IsZeroRewriteSpec(rule.Rewrite) && !policy.RewriteStrict(rule.Rewrite) {
+			ids = append(ids, rule.ID)
+		}
+	}
+	return ids
 }

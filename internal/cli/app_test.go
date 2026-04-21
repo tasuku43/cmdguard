@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/tasuku43/cmdproxy/internal/buildinfo"
+	"github.com/tasuku43/cmdproxy/internal/config"
 	"github.com/tasuku43/cmdproxy/internal/doctor"
 )
 
@@ -682,6 +683,53 @@ func TestRunHookClaudeRewriteCanReturnDenyFromClaudeSettings(t *testing.T) {
 	updatedInput, ok := hookOut["updatedInput"].(map[string]any)
 	if !ok || updatedInput["command"] != "AWS_PROFILE=read-only-profile aws s3 ls" {
 		t.Fatalf("payload = %+v", payload)
+	}
+}
+
+func TestRunHookClaudeImplicitlyVerifiesWhenArtifactMissing(t *testing.T) {
+	home := t.TempDir()
+	writeUserConfig(t, home, `rules:
+  - id: unwrap-shell-dash-c
+    match:
+      command_in: ["bash", "sh"]
+      args_contains: ["-c"]
+    rewrite:
+      unwrap_shell_dash_c: true
+      test:
+        expect:
+          - in: "bash -c 'git status'"
+            out: "git status"
+        pass: ["bash script.sh"]
+`)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hook", "claude"}, Streams{
+		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"bash -c 'git status'"}}`),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: home})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v", err)
+	}
+	hookOut, ok := payload["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if _, ok := hookOut["permissionDecision"]; ok {
+		t.Fatalf("payload = %+v", payload)
+	}
+	updatedInput, ok := hookOut["updatedInput"].(map[string]any)
+	if !ok || updatedInput["command"] != "git status" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	entries, err := os.ReadDir(config.HookCacheDir(home, ""))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("expected implicit verify artifact, err=%v entries=%v", err, entries)
 	}
 }
 

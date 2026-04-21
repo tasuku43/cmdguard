@@ -1,10 +1,13 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/tasuku43/cmdproxy/internal/domain/policy"
 )
 
 func TestLoadEffectiveUsesUserConfig(t *testing.T) {
@@ -189,6 +192,189 @@ func TestLoadFileForEvalIfPresentSupportsStripCommandPath(t *testing.T) {
 	rewritten, ok := rules[0].RewriteCommand("/bin/ls -R foo")
 	if !ok || rewritten != "ls -R foo" {
 		t.Fatalf("RewriteCommand() = %q ok=%v", rewritten, ok)
+	}
+}
+
+func TestVerifyFileWritesVerifiedArtifactAndHookLoadsIt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cmdproxy.yml")
+	cacheDir := t.TempDir()
+	body := `rules:
+  - id: aws-profile-to-env
+    match:
+      command: aws
+      args_contains: ["--profile"]
+    rewrite:
+      move_flag_to_env:
+        flag: "--profile"
+        env: "AWS_PROFILE"
+      test:
+        expect:
+          - in: "aws --profile read-only-profile s3 ls"
+            out: "AWS_PROFILE=read-only-profile aws s3 ls"
+        pass: ["AWS_PROFILE=read-only-profile aws s3 ls"]
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := VerifyFile(Source{Layer: LayerUser, Path: path}, cacheDir, "vtest")
+	if err != nil {
+		t.Fatalf("VerifyFile() error = %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("rules = %#v", rules)
+	}
+
+	files, err := os.ReadDir(cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files = %v", files)
+	}
+	data, err := os.ReadFile(filepath.Join(cacheDir, files[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cache struct {
+		CmdproxyVersion string `json:"cmdproxy_version"`
+		VerifiedAt      string `json:"verified_at"`
+	}
+	if err := json.Unmarshal(data, &cache); err != nil {
+		t.Fatal(err)
+	}
+	if cache.CmdproxyVersion != "vtest" || cache.VerifiedAt == "" {
+		t.Fatalf("cache = %+v", cache)
+	}
+
+	hookRules, err := LoadVerifiedFileForHook(Source{Layer: LayerUser, Path: path}, []string{cacheDir})
+	if err != nil {
+		t.Fatalf("LoadVerifiedFileForHook() error = %v", err)
+	}
+	if len(hookRules) != 1 {
+		t.Fatalf("hookRules = %#v", hookRules)
+	}
+}
+
+func TestLoadVerifiedFileForHookFailsWhenArtifactMissing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cmdproxy.yml")
+	body := `rules:
+  - id: unwrap-shell-dash-c
+    match:
+      command_in: ["bash", "sh"]
+      args_contains: ["-c"]
+    rewrite:
+      unwrap_shell_dash_c: true
+      test:
+        expect:
+          - in: "bash -c 'git status'"
+            out: "git status"
+        pass: ["bash script.sh"]
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadVerifiedFileForHook(Source{Layer: LayerUser, Path: path}, []string{t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "run cmdproxy verify") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadVerifiedFileForHookFallsBackAcrossCacheDirs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cmdproxy.yml")
+	primary := t.TempDir()
+	secondary := t.TempDir()
+	body := `rules:
+  - id: aws-profile-to-env
+    match:
+      command: aws
+      args_contains: ["--profile"]
+    rewrite:
+      move_flag_to_env:
+        flag: "--profile"
+        env: "AWS_PROFILE"
+      test:
+        expect:
+          - in: "aws --profile read-only-profile s3 ls"
+            out: "AWS_PROFILE=read-only-profile aws s3 ls"
+        pass: ["AWS_PROFILE=read-only-profile aws s3 ls"]
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyFile(Source{Layer: LayerUser, Path: path}, secondary, "vtest"); err != nil {
+		t.Fatal(err)
+	}
+	rules, err := LoadVerifiedFileForHook(Source{Layer: LayerUser, Path: path}, []string{primary, secondary})
+	if err != nil {
+		t.Fatalf("LoadVerifiedFileForHook() error = %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("rules = %#v", rules)
+	}
+}
+
+func TestLoadFileIfPresentRejectsUnsupportedBuiltInRewriteContract(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cmdproxy.yml")
+	body := `rules:
+  - id: bad-aws-profile-map
+    match:
+      command: aws
+      args_contains: ["--profile"]
+    rewrite:
+      move_flag_to_env:
+        flag: "--profile"
+        env: "HOGE"
+      test:
+        expect:
+          - in: "aws --profile read-only-profile s3 ls"
+            out: "HOGE=read-only-profile aws s3 ls"
+        pass: ["aws s3 ls"]
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadFileIfPresent(Source{Layer: LayerUser, Path: path})
+	if err == nil || !strings.Contains(err.Error(), "AWS_DEFAULT_REGION") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFileIfPresentAcceptsRelaxedKubectlKubeconfigMapping(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cmdproxy.yml")
+	body := `rules:
+  - id: kubectl-kubeconfig-to-env
+    match:
+      command: kubectl
+      args_contains: ["--kubeconfig"]
+    rewrite:
+      move_flag_to_env:
+        flag: "--kubeconfig"
+        env: "KUBECONFIG"
+      strict: false
+      test:
+        expect:
+          - in: "kubectl --kubeconfig /tmp/dev-kubeconfig get pods"
+            out: "KUBECONFIG=/tmp/dev-kubeconfig kubectl get pods"
+        pass: ["KUBECONFIG=/tmp/dev-kubeconfig kubectl get pods"]
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := LoadFileIfPresent(Source{Layer: LayerUser, Path: path})
+	if err != nil {
+		t.Fatalf("LoadFileIfPresent() error = %v", err)
+	}
+	if len(rules) != 1 || policy.RewriteStrict(rules[0].Rewrite) {
+		t.Fatalf("rules = %#v", rules)
 	}
 }
 
