@@ -110,7 +110,7 @@ test:
 	}
 }
 
-func TestRunHookClaudeAllowFallsBackToAskWhenClaudeSettingsDoNotAllow(t *testing.T) {
+func TestRunHookClaudeAllowRemainsAllowWithoutClaudeSettingsMatch(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, `permission:
   allow:
@@ -142,7 +142,50 @@ test:
 		t.Fatalf("json error: %v", err)
 	}
 	hookOut := payload["hookSpecificOutput"].(map[string]any)
-	if _, ok := hookOut["permissionDecision"]; ok {
+	if hookOut["permissionDecision"] != "allow" {
+		t.Fatalf("payload = %+v", payload)
+	}
+}
+
+func TestRunHookClaudeSettingsAllowUpgradesAskToAllow(t *testing.T) {
+	home := t.TempDir()
+	writeClaudeSettings(t, home, `{
+  "permissions": {
+    "allow": ["Bash(git status -s)"]
+  }
+}`)
+	writeUserConfig(t, home, `permission:
+  ask:
+    - match:
+        command: git
+        args_contains:
+          - "-s"
+      test:
+        ask:
+          - "git status -s"
+        pass:
+          - "git status"
+test:
+  - in: "git status -s"
+    decision: ask
+`)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hook", "claude"}, Streams{
+		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git status -s"}}`),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: home})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v", err)
+	}
+	hookOut := payload["hookSpecificOutput"].(map[string]any)
+	if hookOut["permissionDecision"] != "allow" {
 		t.Fatalf("payload = %+v", payload)
 	}
 }

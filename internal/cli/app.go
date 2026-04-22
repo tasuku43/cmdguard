@@ -473,8 +473,16 @@ func applyClaudePermissionBridge(decision policy.Decision, env Env) policy.Decis
 			decision.Message = "blocked by Claude settings migration rule"
 		}
 		decision.Outcome = "deny"
+	case claude.PermissionAllow:
+		decision.Trace = append(decision.Trace, policy.TraceStep{
+			Action:  "permission",
+			Name:    "claude_settings",
+			Effect:  "allow",
+			Message: "Claude settings allow matched during migration",
+		})
+		decision.Outcome = "allow"
 	case claude.PermissionAsk, claude.PermissionDefault:
-		if decision.Outcome == "allow" {
+		if decision.Outcome != "allow" && decision.Outcome != "deny" {
 			decision.Trace = append(decision.Trace, policy.TraceStep{
 				Action:  "permission",
 				Name:    "claude_settings",
@@ -483,13 +491,6 @@ func applyClaudePermissionBridge(decision policy.Decision, env Env) policy.Decis
 			})
 			decision.Outcome = "ask"
 		}
-	case claude.PermissionAllow:
-		decision.Trace = append(decision.Trace, policy.TraceStep{
-			Action:  "permission",
-			Name:    "claude_settings",
-			Effect:  "allow",
-			Message: "Claude settings allow matched during migration",
-		})
 	}
 	return decision
 }
