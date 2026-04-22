@@ -60,6 +60,9 @@ func applyClaudePermissionBridge(decision policy.Decision, cwd string, home stri
 		}
 		decision.Outcome = "deny"
 	case claude.PermissionAllow:
+		if decision.Outcome == "deny" {
+			return decision
+		}
 		decision.Trace = append(decision.Trace, policy.TraceStep{
 			Action:  "permission",
 			Name:    "claude_settings",

@@ -70,8 +70,9 @@ Add a `PreToolUse` Bash hook that calls `cmdproxy hook claude --rtk`.
 }
 ```
 
-`cmdproxy` now owns permission evaluation itself. Claude Code no longer needs to
-be the source of truth for per-command shell permissions. `cmdproxy` returns:
+`cmdproxy` evaluates its own policy and then combines that result with Claude
+Code settings during a migration/coexistence period. The final result returned
+to Claude is:
 
 - `allow`: auto-allow
 - `ask`: let Claude prompt the user
@@ -79,6 +80,28 @@ be the source of truth for per-command shell permissions. `cmdproxy` returns:
 
 If `--rtk` is enabled, `cmdproxy` evaluates its own permission pipeline first
 and then applies the final `rtk` rewrite before returning `updatedInput`.
+
+### Permission Merge Rule
+
+`cmdproxy` and Claude settings are merged with a safety-first rule:
+
+- if either side returns `deny`, the final result is `deny`
+- else if either side returns `allow`, the final result is `allow`
+- otherwise the final result is `ask`
+
+The important combinations are:
+
+| `cmdproxy` | Claude settings | Final |
+|---|---|---|
+| `deny` | `deny` | `deny` |
+| `deny` | `allow` | `deny` |
+| `deny` | `ask` / default | `deny` |
+| `ask` | `deny` | `deny` |
+| `ask` | `allow` | `allow` |
+| `ask` | `ask` / default | `ask` |
+| `allow` | `deny` | `deny` |
+| `allow` | `allow` | `allow` |
+| `allow` | `ask` / default | `allow` |
 
 ## Current Config Shape
 
