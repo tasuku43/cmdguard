@@ -15,13 +15,17 @@ func runHook(args []string, streams Streams, env Env) int {
 		return exitAllow
 	}
 	useRTK := false
-	switch {
-	case len(args) == 0:
-	case len(args) == 1 && args[0] == "--rtk":
-		useRTK = true
-	default:
-		writeCommandHelp(streams.Stderr, "hook")
-		return exitError
+	autoVerify := false
+	for _, arg := range args {
+		switch arg {
+		case "--rtk":
+			useRTK = true
+		case "--auto-verify":
+			autoVerify = true
+		default:
+			writeCommandHelp(streams.Stderr, "hook")
+			return exitError
+		}
 	}
 
 	raw, err := io.ReadAll(streams.Stdin)
@@ -37,7 +41,7 @@ func runHook(args []string, streams Streams, env Env) int {
 		}.Payload)
 	}
 
-	result := app.RunHook(raw, useRTK, env)
+	result := app.RunHook(raw, useRTK, autoVerify, env)
 	return writeJSON(streams.Stdout, result.Payload)
 }
 

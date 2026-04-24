@@ -122,6 +122,12 @@ option keeps both steps in one hook invocation:
 - first evaluate `cc-bash-proxy` rewrite and permission
 - then apply the final `rtk` rewrite only after permission is settled
 
+By default, `cc-bash-proxy hook` fails closed when its verified artifact is
+missing or stale. Run `cc-bash-proxy verify` after editing policy so the hook
+uses a reviewed artifact. `cc-bash-proxy hook --auto-verify` restores the older
+convenience behavior and regenerates artifacts at hook time, but that means an
+unreviewed config change can become active during a hook invocation.
+
 ### Permission Merge Rule
 
 `cc-bash-proxy` and Claude settings are merged with an explicit mode. The

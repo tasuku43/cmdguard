@@ -93,15 +93,18 @@ Reads stdin JSON, evaluates the configured rewrite and permission pipeline, and
 returns Claude Code hook JSON for allow, ask, deny, or error outcomes.
 
 Usage:
-  cc-bash-proxy hook [--rtk]
+  cc-bash-proxy hook [--rtk] [--auto-verify]
 
 Options:
-  --rtk   run "rtk rewrite" once after cc-bash-proxy policy evaluation and return
-          the final rewritten command if it changes
+  --rtk          run "rtk rewrite" once after cc-bash-proxy policy evaluation and return
+                 the final rewritten command if it changes
+  --auto-verify  regenerate verified hook artifacts when they are missing or stale
 
 Note:
   You usually do not run this manually. Edit rules and use cc-bash-proxy verify
-  while authoring policy instead.
+  while authoring policy instead. Without --auto-verify, the hook fails closed
+  when verified artifacts are missing or stale. --auto-verify is convenient, but
+  it lets hook-time config changes become active without a separate review step.
 `)
 	case "version":
 		fmt.Fprint(w, `cc-bash-proxy version

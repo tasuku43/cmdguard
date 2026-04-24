@@ -31,6 +31,8 @@ The current flow is:
 4. Resolve global and project-local `cc-bash-proxy` policy for the tool
 5. Resolve global and project-local tool settings for the tool
 6. Load the verified artifact for the effective merged state
+   - if the artifact is missing or stale, deny by default
+   - if `--auto-verify` is set, run verify once and retry loading the artifact
 7. Evaluate the rewrite pipeline
 8. Evaluate `cc-bash-proxy` permissions on the rewritten command
 9. Evaluate tool-native permissions for migration and coexistence
@@ -92,3 +94,12 @@ When `cc-bash-proxy hook --rtk` is used, the runtime order is:
 This keeps permission decisions stable even when external Bash hooks are not
 executed serially, and it ensures permission checks happen before `rtk`
 rewrites the visible command.
+
+## Auto Verify
+
+`cc-bash-proxy hook` fails closed when the verified artifact is missing or stale.
+The deny reason should tell the user to run `cc-bash-proxy verify`.
+
+`cc-bash-proxy hook --auto-verify` opts in to hook-time artifact regeneration.
+This is convenient for local iteration, but it weakens the trust model because
+an unreviewed config change can become active during the hook invocation.

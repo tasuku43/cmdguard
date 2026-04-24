@@ -28,6 +28,7 @@ type hookEnvSpec struct {
 	ClaudeLocalSettings string
 	Command             string
 	UseRTK              bool
+	DisableAutoVerify   bool
 }
 
 func runClaudeHookTest(t *testing.T, spec hookEnvSpec) hookPayload {
@@ -66,6 +67,9 @@ func runClaudeHookMapTest(t *testing.T, spec hookEnvSpec) map[string]any {
 	args := []string{"hook"}
 	if spec.UseRTK {
 		args = append(args, "--rtk")
+	}
+	if !spec.DisableAutoVerify {
+		args = append(args, "--auto-verify")
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -121,7 +125,7 @@ test:
 `)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"hook"}, Streams{
+	code := Run([]string{"hook", "--auto-verify"}, Streams{
 		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"aws --profile dev sts get-caller-identity"}}`),
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -162,7 +166,7 @@ test:
 `)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"hook"}, Streams{
+	code := Run([]string{"hook", "--auto-verify"}, Streams{
 		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"aws s3 ls"}}`),
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -282,7 +286,7 @@ test:
 `)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"hook"}, Streams{
+	code := Run([]string{"hook", "--auto-verify"}, Streams{
 		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git diff goal.md"}}`),
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -325,7 +329,7 @@ test:
 `)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"hook"}, Streams{
+	code := Run([]string{"hook", "--auto-verify"}, Streams{
 		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git status -s"}}`),
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -732,7 +736,7 @@ test:
 `)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"hook", "--rtk"}, Streams{
+	code := Run([]string{"hook", "--rtk", "--auto-verify"}, Streams{
 		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git diff goal.md"}}`),
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -777,7 +781,7 @@ test:
 `)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"hook"}, Streams{
+	code := Run([]string{"hook", "--auto-verify"}, Streams{
 		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/x"}}`),
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -796,7 +800,7 @@ test:
 	}
 }
 
-func TestRunHookClaudeImplicitlyVerifiesWhenArtifactMissing(t *testing.T) {
+func TestRunHookClaudeDeniesWhenArtifactMissingByDefault(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, `rewrite:
   - match:
@@ -832,9 +836,117 @@ test:
 	if code != 0 {
 		t.Fatalf("code = %d stderr=%s", code, stderr.String())
 	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v stdout=%s", err, stdout.String())
+	}
+	hookOut := payload["hookSpecificOutput"].(map[string]any)
+	if hookOut["permissionDecision"] != "deny" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	reason, _ := hookOut["permissionDecisionReason"].(string)
+	if !strings.Contains(reason, "verified artifact missing or stale; run cc-bash-proxy verify") {
+		t.Fatalf("reason = %q", reason)
+	}
+}
+
+func TestRunHookClaudeDeniesWhenArtifactStaleByDefault(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	writeUserConfig(t, home, `permission:
+  allow:
+    - match:
+        command: git
+        subcommand: status
+      test:
+        allow:
+          - "git status"
+        pass:
+          - "git diff"
+test:
+  - in: "git status"
+    decision: allow
+`)
+	if _, err := configrepo.VerifyEffectiveToAllCaches(cwd, home, "", "", "claude", "test"); err != nil {
+		t.Fatalf("verify effective: %v", err)
+	}
+	writeUserConfig(t, home, `permission:
+  allow:
+    - match:
+        command: git
+        subcommand: diff
+      test:
+        allow:
+          - "git diff"
+        pass:
+          - "git status"
+test:
+  - in: "git diff"
+    decision: allow
+`)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hook"}, Streams{
+		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git diff"}}`),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: cwd, Home: home})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v stdout=%s", err, stdout.String())
+	}
+	hookOut := payload["hookSpecificOutput"].(map[string]any)
+	if hookOut["permissionDecision"] != "deny" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	reason, _ := hookOut["permissionDecisionReason"].(string)
+	if !strings.Contains(reason, "verified artifact missing or stale; run cc-bash-proxy verify") {
+		t.Fatalf("reason = %q", reason)
+	}
+}
+
+func TestRunHookClaudeAutoVerifyVerifiesWhenArtifactMissing(t *testing.T) {
+	home := t.TempDir()
+	writeUserConfig(t, home, `rewrite:
+  - match:
+      command_in: ["bash", "sh"]
+      args_contains: ["-c"]
+    unwrap_shell_dash_c: true
+    test:
+      - in: "bash -c 'git status'"
+        out: "git status"
+      - pass: "bash script.sh"
+permission:
+  allow:
+    - match:
+        command: git
+        subcommand: status
+      test:
+        allow:
+          - "git status"
+        pass:
+          - "git diff"
+test:
+  - in: "bash -c 'git status'"
+    rewritten: "git status"
+    decision: allow
+`)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hook", "--auto-verify"}, Streams{
+		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"bash -c 'git status'"}}`),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: home})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
 	entries, err := os.ReadDir(configrepo.HookCacheDir(home, ""))
 	if err != nil || len(entries) == 0 {
-		t.Fatalf("expected implicit verify artifact, err=%v entries=%v", err, entries)
+		t.Fatalf("expected auto-verify artifact, err=%v entries=%v", err, entries)
 	}
 }
 
@@ -856,7 +968,7 @@ test:
 `)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"hook"}, Streams{
+	code := Run([]string{"hook", "--auto-verify"}, Streams{
 		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git status && rm -rf /tmp/x"}}`),
 		Stdout: &stdout,
 		Stderr: &stderr,
