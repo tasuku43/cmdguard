@@ -908,6 +908,52 @@ test:
 	}
 }
 
+func TestRunHookClaudeDeniesWhenArtifactEvaluationSemanticsIncompatible(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	cacheHome := t.TempDir()
+	writeUserConfig(t, home, `permission:
+  allow:
+    - match:
+        command: git
+        subcommand: status
+      test:
+        allow:
+          - "git status"
+        pass:
+          - "git diff"
+test:
+  - in: "git status"
+    decision: allow
+`)
+	if _, err := configrepo.VerifyEffectiveToAllCaches(cwd, home, "", cacheHome, "claude", "test"); err != nil {
+		t.Fatalf("verify effective: %v", err)
+	}
+	removeCLIJSONField(t, singleCLICachePath(t, filepath.Join(cacheHome, "cc-bash-proxy")), "evaluation_semantics_version")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"hook"}, Streams{
+		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git status"}}`),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: cwd, Home: home, XDGCacheHome: cacheHome})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json error: %v stdout=%s", err, stdout.String())
+	}
+	hookOut := payload["hookSpecificOutput"].(map[string]any)
+	if hookOut["permissionDecision"] != "deny" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	reason, _ := hookOut["permissionDecisionReason"].(string)
+	if !strings.Contains(reason, "evaluation semantics version 0") || !strings.Contains(reason, "run cc-bash-proxy verify") {
+		t.Fatalf("reason = %q", reason)
+	}
+}
+
 func TestRunHookClaudeAutoVerifyVerifiesWhenArtifactMissing(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, `rewrite:
@@ -1071,6 +1117,38 @@ func writeProjectClaudeLocalSettings(t *testing.T, cwd string, body string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func singleCLICachePath(t *testing.T, dir string) string {
+	t.Helper()
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files = %v", files)
+	}
+	return filepath.Join(dir, files[0].Name())
+}
+
+func removeCLIJSONField(t *testing.T, path string, key string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	delete(payload, key)
+	data, err = json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

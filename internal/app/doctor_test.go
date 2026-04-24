@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +50,35 @@ func TestRunDoctorReportsVerifiedEffectiveArtifact(t *testing.T) {
 	after := RunDoctor(Env{Cwd: cwd, Home: home, XDGCacheHome: xdgCacheHome})
 	if !after.Report.VerifiedArtifactExists {
 		t.Fatalf("expected verified artifact after verify, report=%+v", after.Report)
+	}
+	if !after.Report.VerifiedArtifactCompatible {
+		t.Fatalf("expected compatible verified artifact after verify, report=%+v", after.Report)
+	}
+}
+
+func TestRunDoctorReportsIncompatibleVerifiedArtifact(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	xdgCacheHome := t.TempDir()
+	writeAppUserConfig(t, home, minimalValidConfig())
+
+	if _, err := configrepo.VerifyEffectiveToAllCaches(cwd, home, "", xdgCacheHome, "claude", "test"); err != nil {
+		t.Fatalf("verify effective: %v", err)
+	}
+	appRemoveJSONField(t, singleAppCachePath(t, filepath.Join(xdgCacheHome, "cc-bash-proxy")), "evaluation_semantics_version")
+
+	result := RunDoctor(Env{Cwd: cwd, Home: home, XDGCacheHome: xdgCacheHome})
+	if !result.Report.VerifiedArtifactExists {
+		t.Fatalf("expected artifact to exist, report=%+v", result.Report)
+	}
+	if result.Report.VerifiedArtifactCompatible {
+		t.Fatalf("expected incompatible artifact, report=%+v", result.Report)
+	}
+	if !doctoring.HasFailures(result.Report) {
+		t.Fatalf("expected doctor failure for incompatible artifact, report=%+v", result.Report)
+	}
+	if !reportHasCheck(result.Report, "artifact.evaluation-semantics", doctoring.StatusFail, "evaluation semantics version 0") {
+		t.Fatalf("expected incompatible artifact check, report=%+v", result.Report)
 	}
 }
 
@@ -103,4 +133,45 @@ func reportHasSource(sources []configrepo.Source, path string) bool {
 		}
 	}
 	return false
+}
+
+func reportHasCheck(report doctoring.Report, id string, status doctoring.Status, messagePart string) bool {
+	for _, check := range report.Checks {
+		if check.ID == id && check.Status == status && strings.Contains(check.Message, messagePart) {
+			return true
+		}
+	}
+	return false
+}
+
+func singleAppCachePath(t *testing.T, dir string) string {
+	t.Helper()
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files = %v", files)
+	}
+	return filepath.Join(dir, files[0].Name())
+}
+
+func appRemoveJSONField(t *testing.T, path string, key string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	delete(payload, key)
+	data, err = json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }

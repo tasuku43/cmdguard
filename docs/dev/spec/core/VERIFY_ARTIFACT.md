@@ -24,6 +24,7 @@ The runtime artifact must carry at least:
 - `source_paths`
 - `settings_paths`
 - `cmdproxy_version`
+- `evaluation_semantics_version`
 - `verified_at`
 - `pipeline`
 
@@ -35,8 +36,13 @@ The runtime artifact must carry at least:
 2. resolve the current tool settings files for that tool
 3. compute the effective fingerprint from both policy files and tool settings
 4. look for the artifact matching that fingerprint and tool
-5. reject execution if the artifact is missing or stale
+5. reject execution if the artifact is missing, stale, or was compiled for an
+   incompatible evaluation semantics version
 6. evaluate only the compiled pipeline from that artifact
+
+`evaluation_semantics_version` is bumped when policy evaluation semantics change
+in a way that can affect allow/ask/deny outcomes. A mismatch must fail closed and
+tell the user to run `cc-bash-proxy verify`.
 
 ## Non-Goals
 

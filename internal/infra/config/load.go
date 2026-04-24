@@ -22,6 +22,8 @@ import (
 const LayerUser = "user"
 const LayerProject = "project"
 
+const EvaluationSemanticsVersion = 1
+
 type File = policy.PipelineSpec
 
 type Source = policy.Source
@@ -33,16 +35,24 @@ type Loaded struct {
 }
 
 type evalCacheFile struct {
-	Version         int                 `json:"version"`
-	Tool            string              `json:"tool"`
-	Fingerprint     string              `json:"fingerprint"`
-	SourcePath      string              `json:"source_path,omitempty"`
-	SourceHash      string              `json:"source_hash,omitempty"`
-	SourcePaths     []string            `json:"source_paths,omitempty"`
-	SettingsPaths   []string            `json:"settings_paths,omitempty"`
-	CmdproxyVersion string              `json:"cmdproxy_version,omitempty"`
-	VerifiedAt      string              `json:"verified_at,omitempty"`
-	Pipeline        policy.PipelineSpec `json:"pipeline"`
+	Version                    int                 `json:"version"`
+	Tool                       string              `json:"tool"`
+	Fingerprint                string              `json:"fingerprint"`
+	SourcePath                 string              `json:"source_path,omitempty"`
+	SourceHash                 string              `json:"source_hash,omitempty"`
+	SourcePaths                []string            `json:"source_paths,omitempty"`
+	SettingsPaths              []string            `json:"settings_paths,omitempty"`
+	CmdproxyVersion            string              `json:"cmdproxy_version,omitempty"`
+	EvaluationSemanticsVersion int                 `json:"evaluation_semantics_version"`
+	VerifiedAt                 string              `json:"verified_at,omitempty"`
+	Pipeline                   policy.PipelineSpec `json:"pipeline"`
+}
+
+type EffectiveArtifactStatus struct {
+	Exists     bool
+	Compatible bool
+	Path       string
+	Message    string
 }
 
 func ConfigPaths(home string, xdgConfigHome string) []Source {
@@ -224,14 +234,15 @@ func VerifyEffectiveToAllCaches(cwd string, home string, xdgConfigHome string, x
 		return policy.Pipeline{}, err
 	}
 	cache := evalCacheFile{
-		Version:         2,
-		Tool:            tool,
-		Fingerprint:     inputs.Fingerprint,
-		SourcePaths:     sourcePaths(inputs.ConfigSources),
-		SettingsPaths:   inputs.SettingsPaths,
-		CmdproxyVersion: cmdproxyVersion,
-		VerifiedAt:      time.Now().UTC().Format(time.RFC3339),
-		Pipeline:        pipeline.PipelineSpec,
+		Version:                    2,
+		Tool:                       tool,
+		Fingerprint:                inputs.Fingerprint,
+		SourcePaths:                sourcePaths(inputs.ConfigSources),
+		SettingsPaths:              inputs.SettingsPaths,
+		CmdproxyVersion:            cmdproxyVersion,
+		EvaluationSemanticsVersion: EvaluationSemanticsVersion,
+		VerifiedAt:                 time.Now().UTC().Format(time.RFC3339),
+		Pipeline:                   pipeline.PipelineSpec,
 	}
 	var errs []string
 	success := false
@@ -254,13 +265,20 @@ func VerifyEffectiveToAllCaches(cwd string, home string, xdgConfigHome string, x
 }
 
 func VerifiedEffectiveArtifactExists(cwd string, home string, xdgConfigHome string, xdgCacheHome string, tool string) bool {
+	return VerifiedEffectiveArtifactStatus(cwd, home, xdgConfigHome, xdgCacheHome, tool).Compatible
+}
+
+func VerifiedEffectiveArtifactStatus(cwd string, home string, xdgConfigHome string, xdgCacheHome string, tool string) EffectiveArtifactStatus {
 	inputs := ResolveEffectiveInputs(cwd, home, xdgConfigHome, tool)
 	for _, cacheDir := range HookCacheDirs(home, xdgCacheHome) {
-		if _, ok := loadEffectiveEvalCache(effectiveCachePath(cacheDir, tool, inputs.Fingerprint), inputs); ok {
-			return true
+		cachePath := effectiveCachePath(cacheDir, tool, inputs.Fingerprint)
+		if _, ok, err := loadEffectiveEvalCache(cachePath, inputs); ok {
+			return EffectiveArtifactStatus{Exists: true, Compatible: true, Path: cachePath, Message: "verified artifact is compatible"}
+		} else if err != nil {
+			return EffectiveArtifactStatus{Exists: true, Compatible: false, Path: cachePath, Message: err.Error()}
 		}
 	}
-	return false
+	return EffectiveArtifactStatus{Exists: false, Compatible: false, Message: "verified artifact not found; run cc-bash-proxy verify"}
 }
 
 func loadFileForEval(src Source, cacheDir string, requireVerified bool, cmdproxyVersion string) (policy.Pipeline, error) {
@@ -273,7 +291,9 @@ func loadFileForEval(src Source, cacheDir string, requireVerified bool, cmdproxy
 	}
 	sourceHash := contentHash(data)
 	cachePath := cachePathForHash(cacheDir, sourceHash)
-	if pipeline, ok := loadEvalCache(src, cachePath, sourceHash, requireVerified); ok {
+	if pipeline, ok, err := loadEvalCache(src, cachePath, sourceHash, requireVerified); err != nil {
+		return policy.Pipeline{}, err
+	} else if ok {
 		return pipeline, nil
 	}
 	if requireVerified {
@@ -308,12 +328,13 @@ func compileEvalData(src Source, cacheDir string, cmdproxyVersion string, data s
 	}
 	cachePath := cachePathForHash(cacheDir, sourceHash)
 	if err := writeEvalCache(cachePath, evalCacheFile{
-		Version:         1,
-		SourcePath:      src.Path,
-		SourceHash:      sourceHash,
-		CmdproxyVersion: cmdproxyVersion,
-		VerifiedAt:      time.Now().UTC().Format(time.RFC3339),
-		Pipeline:        file,
+		Version:                    1,
+		SourcePath:                 src.Path,
+		SourceHash:                 sourceHash,
+		CmdproxyVersion:            cmdproxyVersion,
+		EvaluationSemanticsVersion: EvaluationSemanticsVersion,
+		VerifiedAt:                 time.Now().UTC().Format(time.RFC3339),
+		Pipeline:                   file,
 	}); err != nil {
 		return policy.Pipeline{}, err
 	}
@@ -332,7 +353,9 @@ func loadVerifiedFileForHook(src Source, cacheDirs []string) (policy.Pipeline, e
 	sourceHash := contentHash(data)
 	for _, cacheDir := range cacheDirs {
 		cachePath := cachePathForHash(cacheDir, sourceHash)
-		if pipeline, ok := loadEvalCache(src, cachePath, sourceHash, true); ok {
+		if pipeline, ok, err := loadEvalCache(src, cachePath, sourceHash, true); err != nil {
+			return policy.Pipeline{}, err
+		} else if ok {
 			return pipeline, nil
 		}
 	}
@@ -342,7 +365,9 @@ func loadVerifiedFileForHook(src Source, cacheDirs []string) (policy.Pipeline, e
 func loadVerifiedEffectivePipeline(inputs EffectiveInputs, cacheDirs []string) (policy.Pipeline, error) {
 	for _, cacheDir := range cacheDirs {
 		cachePath := effectiveCachePath(cacheDir, inputs.Tool, inputs.Fingerprint)
-		if pipeline, ok := loadEffectiveEvalCache(cachePath, inputs); ok {
+		if pipeline, ok, err := loadEffectiveEvalCache(cachePath, inputs); err != nil {
+			return policy.Pipeline{}, err
+		} else if ok {
 			return pipeline, nil
 		}
 	}
@@ -366,37 +391,47 @@ func validateFile(file File) []string {
 	return issues
 }
 
-func loadEvalCache(src Source, cachePath string, sourceHash string, requireVerified bool) (policy.Pipeline, bool) {
+func loadEvalCache(src Source, cachePath string, sourceHash string, requireVerified bool) (policy.Pipeline, bool, error) {
 	data, err := readTrustedCacheFile(cachePath)
 	if err != nil {
-		return policy.Pipeline{}, false
+		return policy.Pipeline{}, false, nil
 	}
 	var cache evalCacheFile
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return policy.Pipeline{}, false
+		return policy.Pipeline{}, false, nil
 	}
 	if cache.Version != 1 || cache.SourcePath != src.Path || cache.SourceHash != sourceHash {
-		return policy.Pipeline{}, false
+		return policy.Pipeline{}, false, nil
 	}
 	if requireVerified && strings.TrimSpace(cache.VerifiedAt) == "" {
-		return policy.Pipeline{}, false
+		return policy.Pipeline{}, false, nil
 	}
-	return policy.NewPipeline(cache.Pipeline, src), true
+	if cache.EvaluationSemanticsVersion != EvaluationSemanticsVersion {
+		return policy.Pipeline{}, false, incompatibleEvaluationSemanticsError(cachePath, cache.EvaluationSemanticsVersion)
+	}
+	return policy.NewPipeline(cache.Pipeline, src), true, nil
 }
 
-func loadEffectiveEvalCache(cachePath string, inputs EffectiveInputs) (policy.Pipeline, bool) {
+func loadEffectiveEvalCache(cachePath string, inputs EffectiveInputs) (policy.Pipeline, bool, error) {
 	data, err := readTrustedCacheFile(cachePath)
 	if err != nil {
-		return policy.Pipeline{}, false
+		return policy.Pipeline{}, false, nil
 	}
 	var cache evalCacheFile
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return policy.Pipeline{}, false
+		return policy.Pipeline{}, false, nil
 	}
 	if cache.Version != 2 || cache.Tool != inputs.Tool || cache.Fingerprint != inputs.Fingerprint || strings.TrimSpace(cache.VerifiedAt) == "" {
-		return policy.Pipeline{}, false
+		return policy.Pipeline{}, false, nil
 	}
-	return policy.NewPipeline(cache.Pipeline, loadOnceSource(inputs)), true
+	if cache.EvaluationSemanticsVersion != EvaluationSemanticsVersion {
+		return policy.Pipeline{}, false, incompatibleEvaluationSemanticsError(cachePath, cache.EvaluationSemanticsVersion)
+	}
+	return policy.NewPipeline(cache.Pipeline, loadOnceSource(inputs)), true, nil
+}
+
+func incompatibleEvaluationSemanticsError(cachePath string, got int) error {
+	return fmt.Errorf("verified artifact %s is incompatible: evaluation semantics version %d, current %d; run cc-bash-proxy verify", cachePath, got, EvaluationSemanticsVersion)
 }
 
 func writeEvalCache(cachePath string, cache evalCacheFile) error {

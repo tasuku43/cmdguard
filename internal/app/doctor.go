@@ -14,7 +14,7 @@ func RunDoctor(env Env) DoctorResult {
 	report.ConfigSources = inputs.ConfigSources
 	report.SettingsPaths = inputs.SettingsPaths
 	report.EffectiveFingerprint = inputs.Fingerprint
-	report.VerifiedArtifactExists = configrepo.VerifiedEffectiveArtifactExists(env.Cwd, env.Home, env.XDGConfigHome, env.XDGCacheHome, claude.Tool)
+	report = doctoring.AddVerifiedArtifactCheck(report, configrepo.VerifiedEffectiveArtifactStatus(env.Cwd, env.Home, env.XDGConfigHome, env.XDGCacheHome, claude.Tool))
 	return DoctorResult{
 		Report: report,
 	}

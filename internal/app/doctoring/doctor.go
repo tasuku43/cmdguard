@@ -30,13 +30,14 @@ type Check struct {
 }
 
 type Report struct {
-	Tool                      string              `json:"tool,omitempty"`
-	ClaudePermissionMergeMode string              `json:"claude_permission_merge_mode,omitempty"`
-	ConfigSources             []configrepo.Source `json:"config_sources,omitempty"`
-	SettingsPaths             []string            `json:"settings_paths,omitempty"`
-	EffectiveFingerprint      string              `json:"effective_fingerprint,omitempty"`
-	VerifiedArtifactExists    bool                `json:"verified_artifact_exists"`
-	Checks                    []Check             `json:"checks"`
+	Tool                       string              `json:"tool,omitempty"`
+	ClaudePermissionMergeMode  string              `json:"claude_permission_merge_mode,omitempty"`
+	ConfigSources              []configrepo.Source `json:"config_sources,omitempty"`
+	SettingsPaths              []string            `json:"settings_paths,omitempty"`
+	EffectiveFingerprint       string              `json:"effective_fingerprint,omitempty"`
+	VerifiedArtifactExists     bool                `json:"verified_artifact_exists"`
+	VerifiedArtifactCompatible bool                `json:"verified_artifact_compatible"`
+	Checks                     []Check             `json:"checks"`
 }
 
 func Run(loaded configrepo.Loaded, tool string, cwd string, home string) Report {
@@ -136,6 +137,21 @@ func Run(loaded configrepo.Loaded, tool string, cwd string, home string) Report 
 	}
 
 	return Report{ClaudePermissionMergeMode: mergeMode, Checks: checks}
+}
+
+func AddVerifiedArtifactCheck(report Report, status configrepo.EffectiveArtifactStatus) Report {
+	report.VerifiedArtifactExists = status.Exists
+	report.VerifiedArtifactCompatible = status.Compatible
+	if status.Compatible {
+		report.Checks = append(report.Checks, Check{ID: "artifact.evaluation-semantics", Category: "artifact", Status: StatusPass, Message: status.Message})
+		return report
+	}
+	if status.Exists {
+		report.Checks = append(report.Checks, Check{ID: "artifact.evaluation-semantics", Category: "artifact", Status: StatusFail, Message: status.Message})
+		return report
+	}
+	report.Checks = append(report.Checks, Check{ID: "artifact.evaluation-semantics", Category: "artifact", Status: StatusWarn, Message: status.Message})
+	return report
 }
 
 func claudePermissionMergeMode(p policy.Pipeline) string {
