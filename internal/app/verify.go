@@ -14,6 +14,7 @@ func RunVerify(env Env) VerifyResult {
 	tool := claude.Tool
 	loaded := configrepo.LoadEffectiveForTool(env.Cwd, env.Home, env.XDGConfigHome, tool)
 	report := doctoring.Run(loaded, tool, env.Cwd, env.Home)
+	report.Tool = tool
 	info := buildinfo.Read()
 	ok, reasons := VerifyStatus(report, info, tool)
 	artifactBuilt := false

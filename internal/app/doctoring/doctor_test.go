@@ -51,6 +51,49 @@ func TestRunPassesWhenPipelineTestsMatch(t *testing.T) {
 	}
 }
 
+func TestRunWarnsOnMigrationCompatClaudeMergeMode(t *testing.T) {
+	loaded := configrepo.Loaded{
+		Pipeline: policy.NewPipeline(policy.PipelineSpec{
+			Permission: policy.PermissionSpec{
+				Allow: []policy.PermissionRuleSpec{{
+					Match: policy.MatchSpec{Command: "git", Subcommand: "status"},
+					Test:  policy.PermissionTestSpec{Allow: []string{"git status"}, Pass: []string{"git diff"}},
+				}},
+			},
+			Test: policy.PipelineTestSpec{{In: "git status", Decision: "allow"}},
+		}, policy.Source{}),
+	}
+	report := Run(loaded, "claude", t.TempDir(), t.TempDir())
+	if report.ClaudePermissionMergeMode != "migration_compat" {
+		t.Fatalf("mode=%q", report.ClaudePermissionMergeMode)
+	}
+	if !hasCheck(report, "permission.claude-merge-mode", StatusWarn) {
+		t.Fatalf("checks = %+v", report.Checks)
+	}
+}
+
+func TestRunPassesOnStrictClaudeMergeMode(t *testing.T) {
+	loaded := configrepo.Loaded{
+		Pipeline: policy.NewPipeline(policy.PipelineSpec{
+			ClaudePermissionMergeMode: "strict",
+			Permission: policy.PermissionSpec{
+				Allow: []policy.PermissionRuleSpec{{
+					Match: policy.MatchSpec{Command: "git", Subcommand: "status"},
+					Test:  policy.PermissionTestSpec{Allow: []string{"git status"}, Pass: []string{"git diff"}},
+				}},
+			},
+			Test: policy.PipelineTestSpec{{In: "git status", Decision: "allow"}},
+		}, policy.Source{}),
+	}
+	report := Run(loaded, "claude", t.TempDir(), t.TempDir())
+	if report.ClaudePermissionMergeMode != "strict" {
+		t.Fatalf("mode=%q", report.ClaudePermissionMergeMode)
+	}
+	if !hasCheck(report, "permission.claude-merge-mode", StatusPass) {
+		t.Fatalf("checks = %+v", report.Checks)
+	}
+}
+
 func hasCheck(report Report, id string, status Status) bool {
 	for _, check := range report.Checks {
 		if check.ID == id && check.Status == status {

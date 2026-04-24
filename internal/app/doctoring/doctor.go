@@ -30,12 +30,13 @@ type Check struct {
 }
 
 type Report struct {
-	Tool                   string              `json:"tool,omitempty"`
-	ConfigSources          []configrepo.Source `json:"config_sources,omitempty"`
-	SettingsPaths          []string            `json:"settings_paths,omitempty"`
-	EffectiveFingerprint   string              `json:"effective_fingerprint,omitempty"`
-	VerifiedArtifactExists bool                `json:"verified_artifact_exists"`
-	Checks                 []Check             `json:"checks"`
+	Tool                      string              `json:"tool,omitempty"`
+	ClaudePermissionMergeMode string              `json:"claude_permission_merge_mode,omitempty"`
+	ConfigSources             []configrepo.Source `json:"config_sources,omitempty"`
+	SettingsPaths             []string            `json:"settings_paths,omitempty"`
+	EffectiveFingerprint      string              `json:"effective_fingerprint,omitempty"`
+	VerifiedArtifactExists    bool                `json:"verified_artifact_exists"`
+	Checks                    []Check             `json:"checks"`
 }
 
 func Run(loaded configrepo.Loaded, tool string, cwd string, home string) Report {
@@ -84,6 +85,13 @@ func Run(loaded configrepo.Loaded, tool string, cwd string, home string) Report 
 		checks = append(checks, Check{ID: "rewrite.pattern-broadness", Category: "diagnostics", Status: StatusPass, Message: "rewrite matches are not obviously broad"})
 	}
 
+	mergeMode := claudePermissionMergeMode(loaded.Pipeline)
+	if tool == claude.Tool && mergeMode == claude.MergeModeMigrationCompat {
+		checks = append(checks, Check{ID: "permission.claude-merge-mode", Category: "permission", Status: StatusWarn, Message: "Claude permission merge mode is migration_compat; use strict for security-first behavior"})
+	} else if tool == claude.Tool {
+		checks = append(checks, Check{ID: "permission.claude-merge-mode", Category: "permission", Status: StatusPass, Message: "Claude permission merge mode: " + mergeMode})
+	}
+
 	if path, err := exec.LookPath("cc-bash-proxy"); err == nil {
 		checks = append(checks, Check{ID: "install.binary-on-path", Category: "install", Status: StatusPass, Message: "cc-bash-proxy found on PATH at " + path})
 	} else {
@@ -121,7 +129,18 @@ func Run(loaded configrepo.Loaded, tool string, cwd string, home string) Report 
 		}
 	}
 
-	return Report{Checks: checks}
+	return Report{ClaudePermissionMergeMode: mergeMode, Checks: checks}
+}
+
+func claudePermissionMergeMode(p policy.Pipeline) string {
+	switch strings.TrimSpace(p.ClaudePermissionMergeMode) {
+	case claude.MergeModeStrict:
+		return claude.MergeModeStrict
+	case claude.MergeModeCCBashProxyAuthoritative:
+		return claude.MergeModeCCBashProxyAuthoritative
+	default:
+		return claude.MergeModeMigrationCompat
+	}
 }
 
 func HasFailures(report Report) bool {

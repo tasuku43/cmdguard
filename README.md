@@ -140,6 +140,10 @@ Supported values:
 - `cc_bash_proxy_authoritative`: ignore Claude `allow` and `ask`, but still
   honor Claude `deny`
 
+For new security-first setups, prefer `strict`. `migration_compat` exists for
+adopting `cc-bash-proxy` without immediately breaking existing Claude settings
+allow lists, and `doctor` reports it as a warning.
+
 Claude settings are interpreted as four states:
 
 - `deny`
