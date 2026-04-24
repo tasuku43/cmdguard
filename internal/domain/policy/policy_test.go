@@ -304,6 +304,70 @@ func TestEvaluateGitStatusAllowDoesNotMatchNonStatusOrUnsafeShell(t *testing.T) 
 	}
 }
 
+func TestEvaluateCompoundGitCommandsFailClosedAcrossAllowCoverage(t *testing.T) {
+	gitRule := func(subcommand string) PermissionRuleSpec {
+		return PermissionRuleSpec{Match: MatchSpec{Command: "git", Subcommand: subcommand}}
+	}
+
+	tests := []struct {
+		name    string
+		command string
+		allow   []PermissionRuleSpec
+	}{
+		{
+			name:    "left allowed right not allowed",
+			command: "git status && git diff",
+			allow:   []PermissionRuleSpec{gitRule("status")},
+		},
+		{
+			name:    "left not allowed right allowed",
+			command: "git status && git diff",
+			allow:   []PermissionRuleSpec{gitRule("diff")},
+		},
+		{
+			name:    "both allowed and list",
+			command: "git status && git diff",
+			allow:   []PermissionRuleSpec{gitRule("status"), gitRule("diff")},
+		},
+		{
+			name:    "both allowed with git global options",
+			command: "git -C repo status && git --no-pager diff",
+			allow:   []PermissionRuleSpec{gitRule("status"), gitRule("diff")},
+		},
+		{
+			name:    "both allowed or list",
+			command: "git status || git diff",
+			allow:   []PermissionRuleSpec{gitRule("status"), gitRule("diff")},
+		},
+		{
+			name:    "both allowed sequence",
+			command: "git status; git diff",
+			allow:   []PermissionRuleSpec{gitRule("status"), gitRule("diff")},
+		},
+		{
+			name:    "both allowed pipeline",
+			command: "git status | git diff",
+			allow:   []PermissionRuleSpec{gitRule("status"), gitRule("diff")},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewPipeline(PipelineSpec{
+				Permission: PermissionSpec{Allow: tt.allow},
+			}, Source{})
+
+			got, err := Evaluate(p, tt.command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != "ask" {
+				t.Fatalf("Evaluate(%q).Outcome = %q, want ask; decision=%+v", tt.command, got.Outcome, got)
+			}
+		})
+	}
+}
+
 func TestMatchSpecGitSubcommandDoesNotTreatDoubleDashBeforeStatusAsStatus(t *testing.T) {
 	match := MatchSpec{Command: "git", Subcommand: "status"}
 	if match.MatchMatches("git -C repo -- status") {
