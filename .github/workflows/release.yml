@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
   id-token: write
   attestations: write
 
@@ -51,3 +52,53 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-path: dist/checksums.txt
+
+      - name: Determine release channel (stable only)
+        id: channel
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ "${tag}" == *-* ]]; then
+            echo "stable=false" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "stable=true" >>"${GITHUB_OUTPUT}"
+
+      - name: Create GitHub App token for Homebrew tap
+        if: steps.channel.outputs.stable == 'true'
+        id: homebrew-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.HOMEBREW_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_APP_KEY }}
+          owner: tasuku43
+          repositories: homebrew-cc-bash-proxy
+
+      - name: Checkout Homebrew tap
+        if: steps.channel.outputs.stable == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: tasuku43/homebrew-cc-bash-proxy
+          token: ${{ steps.homebrew-token.outputs.token }}
+          path: homebrew-tap
+
+      - name: Update Homebrew formula (working tree)
+        if: steps.channel.outputs.stable == 'true'
+        working-directory: homebrew-tap
+        run: |
+          ../.github/scripts/update-homebrew-formula.sh "${GITHUB_REF_NAME}" "../dist/checksums.txt"
+
+      - name: Create PR for Homebrew formula update
+        if: steps.channel.outputs.stable == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.homebrew-token.outputs.token }}
+          path: homebrew-tap
+          commit-message: "Update Homebrew formula for ${{ github.ref_name }}"
+          title: "Update Homebrew formula for ${{ github.ref_name }}"
+          body: |
+            Updates `Formula/cc-bash-proxy.rb` to point to GitHub Releases artifacts for `${{ github.ref_name }}`.
+          add-paths: |
+            Formula/cc-bash-proxy.rb
+          base: main
+          branch: "chore/homebrew-formula-${{ github.ref_name }}"
+          delete-branch: true
