@@ -103,6 +103,24 @@ func TestEvaluateGitArgsContainsUsesRawWordsForCompatibility(t *testing.T) {
 	}
 }
 
+func TestEvaluateGitArgsContainsMatchesGlobalOptionRawWords(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Ask: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "git", ArgsContains: []string{"-C"}},
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "git -C repo status")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "ask" {
+		t.Fatalf("Outcome = %q, want ask; decision=%+v", got.Outcome, got)
+	}
+}
+
 func TestValidatePipelineRequiresE2ETest(t *testing.T) {
 	issues := ValidatePipeline(PipelineSpec{
 		Rewrite: []RewriteStepSpec{{

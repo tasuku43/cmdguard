@@ -28,6 +28,8 @@ func TestGitParserExtractsActionPathAndGlobalOptions(t *testing.T) {
 			raw:              "git -C repo status",
 			wantGlobal:       []Option{{Name: "-C", Value: "repo", HasValue: true, Position: 0}},
 			wantAction:       []string{"status"},
+			wantArgs:         []string{},
+			wantRawWords:     []string{"-C", "repo", "status"},
 			wantWorkingDir:   "repo",
 			wantStructuredOK: true,
 		},

@@ -328,6 +328,13 @@ test:
     decision: ask
 ```
 
+`args_contains` and `args_prefixes` are legacy raw-word matchers. They inspect
+the command words after the executable token, before command-specific semantic
+argument parsing. For example, `git -C repo status` can still match
+`args_contains: ["-C"]`, even though `-C` is a git global option and not a
+semantic positional argument. Future semantic argument matchers will use new
+field names rather than changing these legacy fields.
+
 ## Design Direction
 
 The current model is pipeline-driven:

@@ -126,6 +126,13 @@ Supported fields:
 - `env_requires`
 - `env_missing`
 
+`args_contains` and `args_prefixes` are legacy raw-word matchers. They inspect
+the command words after the executable token, before command-specific semantic
+argument parsing. This preserves compatibility for commands such as
+`git -C repo status`, where `args_contains: ["-C"]` must continue to match even
+if `Command.Args` later contains only semantic positional arguments. New
+semantic argument matchers should use separate field names.
+
 - `pattern` matches the raw command string using one RE2 expression
 - `patterns` matches the raw command string when any RE2 expression matches
 - `pattern` and `patterns` are alternatives to structured `match`

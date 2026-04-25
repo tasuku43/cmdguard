@@ -180,10 +180,13 @@ Supported match fields:
   - command: exact executable name
   - command_in: executable must be one of these names
   - subcommand: exact first subcommand
-  - args_contains: exact arg tokens that must exist
-  - args_prefixes: arg tokens that must start with these prefixes
+  - args_contains: legacy raw-word tokens that must exist
+  - args_prefixes: legacy raw-word tokens that must start with these prefixes
   - env_requires: env vars that must be present
   - env_missing: env vars that must be absent
+
+args_contains and args_prefixes inspect command words after the executable
+token, before command-specific semantic argument parsing.
 
 Example:
   match:
