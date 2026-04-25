@@ -156,16 +156,28 @@ allow lists, and `doctor` reports it as a warning.
 `cmd1 && cmd2`, `cmd1; cmd2`, `cmd1 || cmd2`, and `cmd1 | cmd2` are compound
 commands.
 
-Permission evaluation is ordered. After rewrite, `cc-bash-proxy` first checks
-raw/full-command rules in bucket order: `deny`, then `ask`, then `allow`.
-Only after those stages do compound commands fall through to `CommandPlan`
-composition.
+Permission evaluation is ordered and deterministic. After rewrite,
+`cc-bash-proxy` separates raw rules (`pattern` / `patterns`) from structured
+rules (`match`) and evaluates them in this order:
 
-This means a raw `deny` or `ask` pattern for the full command wins before
-composition, even when every extracted command would otherwise be allowed.
-Raw `allow` patterns are still guarded by shell safety. They cannot allow a
-compound command unless the rule explicitly sets `allow_unsafe_shell: true`,
-which opts in to allowing the whole shell expression.
+1. raw `deny`
+2. structured `deny`
+3. raw `ask`
+4. structured `ask`
+5. structured `allow`
+6. raw `allow`, only when `allow_unsafe_shell: true` is set
+
+Raw rules are an escape hatch for full-command shell-shape matching. Structured
+rules are the default and preferred permission model. A raw `deny` or `ask`
+pattern for the full command wins before composition, even when every extracted
+command would otherwise be allowed. A structured `deny` or `ask` for an
+extracted command wins before raw `allow`, even if that raw allow explicitly
+sets `allow_unsafe_shell: true`.
+
+Raw `allow` is dangerous and opt-in. It is disabled unless the rule explicitly
+sets `allow_unsafe_shell: true`, which grants permission to the whole matched
+shell expression. Without that opt-in, raw allow patterns do not allow the raw
+command; use structured `match` rules for normal allow cases.
 
 For Claude Code compatibility, normal composition does not allow a broad raw
 command pattern to grant permission across shell operators. Instead, the shell

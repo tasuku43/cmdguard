@@ -457,6 +457,9 @@ func TestEvaluateRawDenyPatternBeatsCompositionAllow(t *testing.T) {
 	if steps := traceStepsByName(got.Trace, "composition"); len(steps) != 0 {
 		t.Fatalf("composition trace steps = %d, want 0; trace=%+v", len(steps), got.Trace)
 	}
+	if last := got.Trace[len(got.Trace)-1]; last.RuleType != "raw" {
+		t.Fatalf("rule_type=%q, want raw; trace=%+v", last.RuleType, got.Trace)
+	}
 }
 
 func TestEvaluateRawAskPatternBeatsCompositionAllow(t *testing.T) {
@@ -486,6 +489,9 @@ func TestEvaluateRawAskPatternBeatsCompositionAllow(t *testing.T) {
 	if steps := traceStepsByName(got.Trace, "composition"); len(steps) != 0 {
 		t.Fatalf("composition trace steps = %d, want 0; trace=%+v", len(steps), got.Trace)
 	}
+	if last := got.Trace[len(got.Trace)-1]; last.RuleType != "raw" {
+		t.Fatalf("rule_type=%q, want raw; trace=%+v", last.RuleType, got.Trace)
+	}
 }
 
 func TestEvaluateUnsafeRawAllowPatternBeatsCompositionAsk(t *testing.T) {
@@ -512,6 +518,9 @@ func TestEvaluateUnsafeRawAllowPatternBeatsCompositionAsk(t *testing.T) {
 	if steps := traceStepsByName(got.Trace, "composition"); len(steps) != 0 {
 		t.Fatalf("composition trace steps = %d, want 0; trace=%+v", len(steps), got.Trace)
 	}
+	if last := got.Trace[len(got.Trace)-1]; last.RuleType != "raw" {
+		t.Fatalf("rule_type=%q, want raw; trace=%+v", last.RuleType, got.Trace)
+	}
 }
 
 func TestEvaluateRawAllowPatternWithoutUnsafeShellDoesNotBypassComposition(t *testing.T) {
@@ -529,6 +538,86 @@ func TestEvaluateRawAllowPatternWithoutUnsafeShellDoesNotBypassComposition(t *te
 	}
 	if got.Outcome != "ask" {
 		t.Fatalf("Outcome = %q, want ask; decision=%+v", got.Outcome, got)
+	}
+}
+
+func TestEvaluateRawAllowPatternWithoutUnsafeShellDoesNotAllowSimpleCommand(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{
+				Pattern: `^\s*git\s+status\s*$`,
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "git status")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "ask" {
+		t.Fatalf("Outcome = %q, want ask; decision=%+v", got.Outcome, got)
+	}
+}
+
+func TestEvaluateStructuredDenyBeatsUnsafeRawAllow(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Deny: []PermissionRuleSpec{{
+				Match:   MatchSpec{Command: "rm"},
+				Message: "rm denied",
+			}},
+			Allow: []PermissionRuleSpec{{
+				Pattern:          `^\s*git\s+status\s*&&\s*rm\s+-rf\s+/tmp/x\s*$`,
+				AllowUnsafeShell: true,
+				Message:          "trusted full compound",
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "git status && rm -rf /tmp/x")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "deny" {
+		t.Fatalf("Outcome = %q, want deny; decision=%+v", got.Outcome, got)
+	}
+	if got.Message != "rm denied" {
+		t.Fatalf("Message = %q, want structured deny message; decision=%+v", got.Message, got)
+	}
+	final := got.Trace[len(got.Trace)-1]
+	if final.Name != "composition" || final.RuleType != "structured" {
+		t.Fatalf("final trace=%+v, want structured composition; trace=%+v", final, got.Trace)
+	}
+}
+
+func TestEvaluateStructuredAskBeatsUnsafeRawAllow(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Ask: []PermissionRuleSpec{{
+				Match:   MatchSpec{Command: "rm"},
+				Message: "rm asks",
+			}},
+			Allow: []PermissionRuleSpec{{
+				Pattern:          `^\s*git\s+status\s*&&\s*rm\s+-rf\s+/tmp/x\s*$`,
+				AllowUnsafeShell: true,
+				Message:          "trusted full compound",
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "git status && rm -rf /tmp/x")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "ask" {
+		t.Fatalf("Outcome = %q, want ask; decision=%+v", got.Outcome, got)
+	}
+	if got.Message != "rm asks" {
+		t.Fatalf("Message = %q, want structured ask message; decision=%+v", got.Message, got)
+	}
+	final := got.Trace[len(got.Trace)-1]
+	if final.Name != "composition" || final.RuleType != "structured" {
+		t.Fatalf("final trace=%+v, want structured composition; trace=%+v", final, got.Trace)
 	}
 }
 
