@@ -29,6 +29,7 @@ type Command struct {
 	SemanticParser   string
 	Git              *GitSemantic
 	AWS              *AWSSemantic
+	Kubectl          *KubectlSemantic
 }
 
 type Option struct {
@@ -63,6 +64,24 @@ type AWSSemantic struct {
 	Flags           []string
 	ProfileConflict bool
 	RegionSource    string
+}
+
+type KubectlSemantic struct {
+	Verb          string
+	Subverb       string
+	ResourceType  string
+	ResourceName  string
+	Namespace     string
+	Context       string
+	Kubeconfig    string
+	AllNamespaces bool
+	DryRun        *bool
+	Force         bool
+	Recursive     bool
+	Filenames     []string
+	Selectors     []string
+	Container     string
+	Flags         []string
 }
 
 func (c Command) HasOption(name string) bool {

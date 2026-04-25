@@ -194,11 +194,12 @@ the raw command; use structured `match` rules for normal allow cases.
 Structured permission `match` supports command-specific semantic matching. The
 `match.command` value is the discriminator for the `semantic` schema; do not
 nest another command key under `semantic`; for example, use `semantic.service`,
-not `semantic.aws.service`. Today `command: git` and `command: aws` have
-semantic schemas. Semantic matching is best-effort static parsing from argv, is
-not attempted by the `GenericParser` fallback, and unsupported fields or value
-types fail during `verify`. Semantic matching is permission-only and cannot be
-used in rewrite selectors or with raw `pattern` / `patterns`.
+not `semantic.aws.service` or `semantic.kubectl.verb`. Today `command: git`,
+`command: aws`, and `command: kubectl` have semantic schemas. Semantic matching
+is best-effort static parsing from argv, is not attempted by the `GenericParser`
+fallback, and unsupported fields or value types fail during `verify`. Semantic
+matching is permission-only and cannot be used in rewrite selectors or with raw
+`pattern` / `patterns`.
 
 ```yaml
 permission:
@@ -237,6 +238,21 @@ permission:
           service: s3
           operation_in: [rm, rb, delete-object, delete-bucket]
       message: "destructive S3 operation is blocked"
+
+    - match:
+        command: kubectl
+        semantic:
+          verb: delete
+          resource_type_in: [pod, deployment, namespace]
+          namespace_in: [prod, production]
+      message: "deleting production Kubernetes resources is blocked"
+
+    - match:
+        command: kubectl
+        semantic:
+          context: prod
+          verb_in: [delete, apply, scale, rollout]
+      message: "mutating production cluster is blocked"
 ```
 
 Fail-closed means `allow` rules are ignored when parsing or shell-shape analysis
@@ -492,10 +508,25 @@ reads `aws [global options] <service> <operation> ...`. `--profile` overrides
 `--no-dry-run` is present, so `dry_run: false` matches only explicit
 `--no-dry-run`; unknown is not treated as false.
 
+For `command: kubectl`, `match.semantic` may use `verb`, `verb_in`,
+`subverb`, `subverb_in`, `resource_type`, `resource_type_in`,
+`resource_name`, `resource_name_in`, `namespace`, `namespace_in`, `context`,
+`context_in`, `kubeconfig`, boolean fields `all_namespaces`, `dry_run`,
+`force`, `recursive`, filename fields `filename`, `filename_in`,
+`filename_prefix`, selector fields `selector`, `selector_contains`,
+`container`, plus `flags_contains` and `flags_prefixes`. The kubectl parser
+reads static argv only: it does not read manifest files or query Kubernetes.
+`-n`, `--namespace`, and `--namespace=...` set `namespace`; `--context` and
+`--context=...` set `context`; `--dry-run`, `--dry-run=server`, and
+`--dry-run=client` set `dry_run: true`; `-f` / `--filename` set filename;
+`-l` / `--selector` set selector; `-c` / `--container` sets container.
+`rollout restart` is represented as `verb: rollout` and `subverb: restart`.
+
 `semantic` requires exact `match.command`; `command_in` with `semantic` is
 invalid. `subcommand` with `semantic` is invalid because command-specific
-semantic fields are more precise. Future semantic support will add a separate
-command-specific schema for each command.
+semantic fields are more precise. Unsupported semantic fields, unsupported
+value types, command/schema mismatches, and `rewrite.match.semantic` fail
+`cc-bash-proxy verify`.
 
 ## Current Design
 

@@ -226,7 +226,8 @@ is an exact command discriminator. `command_in` plus `semantic` is invalid
 because the semantic schema would be ambiguous. `semantic` is an internal member
 of `match`; it cannot be combined with top-level `pattern` or `patterns`.
 Do not nest another command key under `semantic`: `semantic.service` is valid
-for AWS rules, while `semantic.aws.service` is invalid.
+for AWS rules and `semantic.verb` is valid for kubectl rules, while
+`semantic.aws.service` or `semantic.kubectl.verb` is invalid.
 
 For `command: git`, the Git semantic schema is:
 
@@ -288,10 +289,53 @@ options are parsed before the service. `--profile` overrides `AWS_PROFILE`.
 to false. If neither flag is present, `dry_run` is unknown, and `dry_run: false`
 does not match that unknown state.
 
+For `command: kubectl`, the kubectl semantic schema is:
+
+- string selectors: `verb`, `subverb`, `resource_type`, `resource_name`,
+  `namespace`, `context`, `kubeconfig`, `filename`, `filename_prefix`,
+  `selector`, `container`
+- string-list selectors: `verb_in`, `subverb_in`, `resource_type_in`,
+  `resource_name_in`, `namespace_in`, `context_in`, `filename_in`,
+  `selector_contains`
+- boolean selectors: `all_namespaces`, `dry_run`, `force`, `recursive`
+- flag selectors: `flags_contains`, `flags_prefixes`
+
+Example:
+
+```yaml
+deny:
+  - match:
+      command: kubectl
+      semantic:
+        verb: delete
+        resource_type_in:
+          - pod
+          - deployment
+          - namespace
+        namespace_in:
+          - prod
+          - production
+    message: "deleting production Kubernetes resources is blocked"
+```
+
+Kubectl semantic parsing statically reads commands shaped as
+`kubectl [global options] <verb> [resource_type[/resource_name] | resource_type resource_name] [flags]`.
+Options may appear before or after the verb. `-n`, `--namespace`, and
+`--namespace=...` set `namespace`; `--context` and `--context=...` set
+`context`; `--kubeconfig` and `--kubeconfig=...` set `kubeconfig`. `-A` and
+`--all-namespaces` set `all_namespaces` to true. `--dry-run`,
+`--dry-run=server`, and `--dry-run=client` set `dry_run` to true. `--force`
+sets `force` to true. `-R` and `--recursive` set `recursive` to true. `-f`,
+`--filename`, and `--filename=...` populate filename selectors. `-l`,
+`--selector`, and `--selector=...` populate selector selectors. `-c`,
+`--container`, and `--container=...` set `container`. `rollout restart` is
+represented as `verb: rollout` and `subverb: restart`. Manifest files are not
+read; only static CLI argv is parsed.
+
 Unsupported semantic fields, unsupported value types, `semantic` without exact
 `command`, `command_in` with `semantic`, `subcommand` with `semantic`, command
 and semantic schema mismatches, and rewrite selectors with `semantic` are
-validation errors. Future commands such as `kubectl` or `gh` must add their own
+validation errors. Future commands such as `gh` must add their own
 command-specific semantic schema and verification.
 
 For `permission.allow`, `pattern` and `patterns` fail closed to `ask` unless

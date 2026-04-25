@@ -128,6 +128,24 @@ type SemanticMatchSpec struct {
 	EndpointURLPrefix string   `yaml:"endpoint_url_prefix" json:"endpoint_url_prefix,omitempty"`
 	DryRun            *bool    `yaml:"dry_run" json:"dry_run,omitempty"`
 	NoCLIPager        *bool    `yaml:"no_cli_pager" json:"no_cli_pager,omitempty"`
+	Subverb           string   `yaml:"subverb" json:"subverb,omitempty"`
+	SubverbIn         []string `yaml:"subverb_in" json:"subverb_in,omitempty"`
+	ResourceType      string   `yaml:"resource_type" json:"resource_type,omitempty"`
+	ResourceTypeIn    []string `yaml:"resource_type_in" json:"resource_type_in,omitempty"`
+	ResourceName      string   `yaml:"resource_name" json:"resource_name,omitempty"`
+	ResourceNameIn    []string `yaml:"resource_name_in" json:"resource_name_in,omitempty"`
+	Namespace         string   `yaml:"namespace" json:"namespace,omitempty"`
+	NamespaceIn       []string `yaml:"namespace_in" json:"namespace_in,omitempty"`
+	Context           string   `yaml:"context" json:"context,omitempty"`
+	ContextIn         []string `yaml:"context_in" json:"context_in,omitempty"`
+	Kubeconfig        string   `yaml:"kubeconfig" json:"kubeconfig,omitempty"`
+	AllNamespaces     *bool    `yaml:"all_namespaces" json:"all_namespaces,omitempty"`
+	Filename          string   `yaml:"filename" json:"filename,omitempty"`
+	FilenameIn        []string `yaml:"filename_in" json:"filename_in,omitempty"`
+	FilenamePrefix    string   `yaml:"filename_prefix" json:"filename_prefix,omitempty"`
+	Selector          string   `yaml:"selector" json:"selector,omitempty"`
+	SelectorContains  []string `yaml:"selector_contains" json:"selector_contains,omitempty"`
+	Container         string   `yaml:"container" json:"container,omitempty"`
 }
 
 type Source struct {
@@ -160,37 +178,43 @@ type Decision struct {
 }
 
 type TraceStep struct {
-	Action         string   `json:"action"`
-	Name           string   `json:"name,omitempty"`
-	Effect         string   `json:"effect,omitempty"`
-	RuleType       string   `json:"rule_type,omitempty"`
-	From           string   `json:"from,omitempty"`
-	To             string   `json:"to,omitempty"`
-	Message        string   `json:"message,omitempty"`
-	Reason         string   `json:"reason,omitempty"`
-	Command        string   `json:"command,omitempty"`
-	CommandIndex   *int     `json:"command_index,omitempty"`
-	Parser         string   `json:"parser,omitempty"`
-	SemanticParser string   `json:"semantic_parser,omitempty"`
-	SemanticMatch  bool     `json:"semantic_match,omitempty"`
-	SemanticFields []string `json:"semantic_fields,omitempty"`
-	AWSService     string   `json:"aws_service,omitempty"`
-	AWSOperation   string   `json:"aws_operation,omitempty"`
-	AWSProfile     string   `json:"aws_profile,omitempty"`
-	AWSRegion      string   `json:"aws_region,omitempty"`
-	FromShape      string   `json:"from_shape,omitempty"`
-	FromShapeFlags []string `json:"from_shape_flags,omitempty"`
-	FromSafe       *bool    `json:"from_safe,omitempty"`
-	ToShape        string   `json:"to_shape,omitempty"`
-	ToShapeFlags   []string `json:"to_shape_flags,omitempty"`
-	ToSafe         *bool    `json:"to_safe,omitempty"`
-	Program        string   `json:"program,omitempty"`
-	ActionPath     []string `json:"action_path,omitempty"`
-	Shape          string   `json:"shape,omitempty"`
-	ShapeFlags     []string `json:"shape_flags,omitempty"`
-	Relaxed        bool     `json:"relaxed,omitempty"`
-	Continue       bool     `json:"continue,omitempty"`
-	Source         *Source  `json:"source,omitempty"`
+	Action              string   `json:"action"`
+	Name                string   `json:"name,omitempty"`
+	Effect              string   `json:"effect,omitempty"`
+	RuleType            string   `json:"rule_type,omitempty"`
+	From                string   `json:"from,omitempty"`
+	To                  string   `json:"to,omitempty"`
+	Message             string   `json:"message,omitempty"`
+	Reason              string   `json:"reason,omitempty"`
+	Command             string   `json:"command,omitempty"`
+	CommandIndex        *int     `json:"command_index,omitempty"`
+	Parser              string   `json:"parser,omitempty"`
+	SemanticParser      string   `json:"semantic_parser,omitempty"`
+	SemanticMatch       bool     `json:"semantic_match,omitempty"`
+	SemanticFields      []string `json:"semantic_fields,omitempty"`
+	AWSService          string   `json:"aws_service,omitempty"`
+	AWSOperation        string   `json:"aws_operation,omitempty"`
+	AWSProfile          string   `json:"aws_profile,omitempty"`
+	AWSRegion           string   `json:"aws_region,omitempty"`
+	KubectlVerb         string   `json:"kubectl_verb,omitempty"`
+	KubectlSubverb      string   `json:"kubectl_subverb,omitempty"`
+	KubectlResourceType string   `json:"kubectl_resource_type,omitempty"`
+	KubectlResourceName string   `json:"kubectl_resource_name,omitempty"`
+	KubectlNamespace    string   `json:"kubectl_namespace,omitempty"`
+	KubectlContext      string   `json:"kubectl_context,omitempty"`
+	FromShape           string   `json:"from_shape,omitempty"`
+	FromShapeFlags      []string `json:"from_shape_flags,omitempty"`
+	FromSafe            *bool    `json:"from_safe,omitempty"`
+	ToShape             string   `json:"to_shape,omitempty"`
+	ToShapeFlags        []string `json:"to_shape_flags,omitempty"`
+	ToSafe              *bool    `json:"to_safe,omitempty"`
+	Program             string   `json:"program,omitempty"`
+	ActionPath          []string `json:"action_path,omitempty"`
+	Shape               string   `json:"shape,omitempty"`
+	ShapeFlags          []string `json:"shape_flags,omitempty"`
+	Relaxed             bool     `json:"relaxed,omitempty"`
+	Continue            bool     `json:"continue,omitempty"`
+	Source              *Source  `json:"source,omitempty"`
 }
 
 const (
@@ -491,6 +515,14 @@ func permissionTraceStepForCommand(effect string, ruleType string, rule Permissi
 		step.AWSProfile = cmd.AWS.Profile
 		step.AWSRegion = cmd.AWS.Region
 	}
+	if cmd.Kubectl != nil {
+		step.KubectlVerb = cmd.Kubectl.Verb
+		step.KubectlSubverb = cmd.Kubectl.Subverb
+		step.KubectlResourceType = cmd.Kubectl.ResourceType
+		step.KubectlResourceName = cmd.Kubectl.ResourceName
+		step.KubectlNamespace = cmd.Kubectl.Namespace
+		step.KubectlContext = cmd.Kubectl.Context
+	}
 	if rule.Match.Semantic != nil {
 		step.SemanticMatch = true
 		step.SemanticFields = rule.Match.Semantic.fieldsUsed()
@@ -710,21 +742,27 @@ func compositionTrace(plan commandpkg.CommandPlan, decisions []commandDecision, 
 		index := i
 		cmd := commandDecision.Command
 		trace = append(trace, TraceStep{
-			Action:         "permission",
-			Name:           "composition.command",
-			Effect:         commandDecision.Outcome,
-			RuleType:       commandDecision.RuleType,
-			Command:        cmd.Raw,
-			CommandIndex:   &index,
-			Parser:         cmd.Parser,
-			SemanticParser: cmd.SemanticParser,
-			AWSService:     awsTraceService(cmd),
-			AWSOperation:   awsTraceOperation(cmd),
-			AWSProfile:     awsTraceProfile(cmd),
-			AWSRegion:      awsTraceRegion(cmd),
-			Program:        cmd.Program,
-			ActionPath:     append([]string(nil), cmd.ActionPath...),
-			Source:         sourcePtr(commandDecision.Rule.Source),
+			Action:              "permission",
+			Name:                "composition.command",
+			Effect:              commandDecision.Outcome,
+			RuleType:            commandDecision.RuleType,
+			Command:             cmd.Raw,
+			CommandIndex:        &index,
+			Parser:              cmd.Parser,
+			SemanticParser:      cmd.SemanticParser,
+			AWSService:          awsTraceService(cmd),
+			AWSOperation:        awsTraceOperation(cmd),
+			AWSProfile:          awsTraceProfile(cmd),
+			AWSRegion:           awsTraceRegion(cmd),
+			KubectlVerb:         kubectlTraceVerb(cmd),
+			KubectlSubverb:      kubectlTraceSubverb(cmd),
+			KubectlResourceType: kubectlTraceResourceType(cmd),
+			KubectlResourceName: kubectlTraceResourceName(cmd),
+			KubectlNamespace:    kubectlTraceNamespace(cmd),
+			KubectlContext:      kubectlTraceContext(cmd),
+			Program:             cmd.Program,
+			ActionPath:          append([]string(nil), cmd.ActionPath...),
+			Source:              sourcePtr(commandDecision.Rule.Source),
 		})
 	}
 	trace = append(trace, TraceStep{
@@ -767,6 +805,48 @@ func awsTraceRegion(cmd commandpkg.Command) string {
 		return ""
 	}
 	return cmd.AWS.Region
+}
+
+func kubectlTraceVerb(cmd commandpkg.Command) string {
+	if cmd.Kubectl == nil {
+		return ""
+	}
+	return cmd.Kubectl.Verb
+}
+
+func kubectlTraceSubverb(cmd commandpkg.Command) string {
+	if cmd.Kubectl == nil {
+		return ""
+	}
+	return cmd.Kubectl.Subverb
+}
+
+func kubectlTraceResourceType(cmd commandpkg.Command) string {
+	if cmd.Kubectl == nil {
+		return ""
+	}
+	return cmd.Kubectl.ResourceType
+}
+
+func kubectlTraceResourceName(cmd commandpkg.Command) string {
+	if cmd.Kubectl == nil {
+		return ""
+	}
+	return cmd.Kubectl.ResourceName
+}
+
+func kubectlTraceNamespace(cmd commandpkg.Command) string {
+	if cmd.Kubectl == nil {
+		return ""
+	}
+	return cmd.Kubectl.Namespace
+}
+
+func kubectlTraceContext(cmd commandpkg.Command) string {
+	if cmd.Kubectl == nil {
+		return ""
+	}
+	return cmd.Kubectl.Context
 }
 
 func firstPreparedCommandMatch(rules []preparedPermissionRule, cmd commandpkg.Command) (PermissionRuleSpec, bool) {
@@ -1045,6 +1125,10 @@ func (m MatchSpec) matches(cmd commandpkg.Command) bool {
 			if !m.Semantic.matchesAWS(cmd) {
 				return false
 			}
+		case "kubectl":
+			if !m.Semantic.matchesKubectl(cmd) {
+				return false
+			}
 		default:
 			return false
 		}
@@ -1170,6 +1254,97 @@ func (s SemanticMatchSpec) matchesAWS(cmd commandpkg.Command) bool {
 	return true
 }
 
+func (s SemanticMatchSpec) matchesKubectl(cmd commandpkg.Command) bool {
+	if cmd.SemanticParser != "kubectl" || cmd.Kubectl == nil {
+		return false
+	}
+	k := cmd.Kubectl
+	if s.Verb != "" && k.Verb != s.Verb {
+		return false
+	}
+	if len(s.VerbIn) > 0 && !containsString(s.VerbIn, k.Verb) {
+		return false
+	}
+	if s.Subverb != "" && k.Subverb != s.Subverb {
+		return false
+	}
+	if len(s.SubverbIn) > 0 && !containsString(s.SubverbIn, k.Subverb) {
+		return false
+	}
+	if s.ResourceType != "" && k.ResourceType != s.ResourceType {
+		return false
+	}
+	if len(s.ResourceTypeIn) > 0 && !containsString(s.ResourceTypeIn, k.ResourceType) {
+		return false
+	}
+	if s.ResourceName != "" && k.ResourceName != s.ResourceName {
+		return false
+	}
+	if len(s.ResourceNameIn) > 0 && !containsString(s.ResourceNameIn, k.ResourceName) {
+		return false
+	}
+	if s.Namespace != "" && k.Namespace != s.Namespace {
+		return false
+	}
+	if len(s.NamespaceIn) > 0 && !containsString(s.NamespaceIn, k.Namespace) {
+		return false
+	}
+	if s.Context != "" && k.Context != s.Context {
+		return false
+	}
+	if len(s.ContextIn) > 0 && !containsString(s.ContextIn, k.Context) {
+		return false
+	}
+	if s.Kubeconfig != "" && k.Kubeconfig != s.Kubeconfig {
+		return false
+	}
+	if s.AllNamespaces != nil && k.AllNamespaces != *s.AllNamespaces {
+		return false
+	}
+	if s.DryRun != nil {
+		if k.DryRun == nil || *k.DryRun != *s.DryRun {
+			return false
+		}
+	}
+	if s.Force != nil && k.Force != *s.Force {
+		return false
+	}
+	if s.Recursive != nil && k.Recursive != *s.Recursive {
+		return false
+	}
+	if s.Filename != "" && !containsString(k.Filenames, s.Filename) {
+		return false
+	}
+	if len(s.FilenameIn) > 0 && !containsAnyString(k.Filenames, s.FilenameIn) {
+		return false
+	}
+	if s.FilenamePrefix != "" && !containsPrefix(k.Filenames, s.FilenamePrefix) {
+		return false
+	}
+	if s.Selector != "" && !containsString(k.Selectors, s.Selector) {
+		return false
+	}
+	for _, value := range s.SelectorContains {
+		if !containsSubstring(k.Selectors, value) {
+			return false
+		}
+	}
+	if s.Container != "" && k.Container != s.Container {
+		return false
+	}
+	for _, flag := range s.FlagsContains {
+		if !containsString(k.Flags, flag) {
+			return false
+		}
+	}
+	for _, prefix := range s.FlagsPrefixes {
+		if !containsPrefix(k.Flags, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s SemanticMatchSpec) fieldsUsed() []string {
 	var fields []string
 	if s.Verb != "" {
@@ -1255,6 +1430,60 @@ func (s SemanticMatchSpec) fieldsUsed() []string {
 	}
 	if s.NoCLIPager != nil {
 		fields = append(fields, "no_cli_pager")
+	}
+	if s.Subverb != "" {
+		fields = append(fields, "subverb")
+	}
+	if len(s.SubverbIn) > 0 {
+		fields = append(fields, "subverb_in")
+	}
+	if s.ResourceType != "" {
+		fields = append(fields, "resource_type")
+	}
+	if len(s.ResourceTypeIn) > 0 {
+		fields = append(fields, "resource_type_in")
+	}
+	if s.ResourceName != "" {
+		fields = append(fields, "resource_name")
+	}
+	if len(s.ResourceNameIn) > 0 {
+		fields = append(fields, "resource_name_in")
+	}
+	if s.Namespace != "" {
+		fields = append(fields, "namespace")
+	}
+	if len(s.NamespaceIn) > 0 {
+		fields = append(fields, "namespace_in")
+	}
+	if s.Context != "" {
+		fields = append(fields, "context")
+	}
+	if len(s.ContextIn) > 0 {
+		fields = append(fields, "context_in")
+	}
+	if s.Kubeconfig != "" {
+		fields = append(fields, "kubeconfig")
+	}
+	if s.AllNamespaces != nil {
+		fields = append(fields, "all_namespaces")
+	}
+	if s.Filename != "" {
+		fields = append(fields, "filename")
+	}
+	if len(s.FilenameIn) > 0 {
+		fields = append(fields, "filename_in")
+	}
+	if s.FilenamePrefix != "" {
+		fields = append(fields, "filename_prefix")
+	}
+	if s.Selector != "" {
+		fields = append(fields, "selector")
+	}
+	if len(s.SelectorContains) > 0 {
+		fields = append(fields, "selector_contains")
+	}
+	if s.Container != "" {
+		fields = append(fields, "container")
 	}
 	return fields
 }
@@ -1428,18 +1657,23 @@ func validateMatchSpec(prefix string, match MatchSpec, allowSemantic bool) []str
 		}
 		switch match.Command {
 		case "git":
-			if hasAWSSemanticFields(*match.Semantic) {
+			if hasAWSSemanticFields(*match.Semantic) || hasKubectlOnlySemanticFields(*match.Semantic) {
 				issues = append(issues, prefix+".semantic contains fields not supported for command: git")
 			}
 			issues = append(issues, ValidateGitSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
 		case "aws":
-			if hasGitSemanticFields(*match.Semantic) {
+			if hasGitSemanticFields(*match.Semantic) || hasKubectlOnlySemanticFields(*match.Semantic) {
 				issues = append(issues, prefix+".semantic contains fields not supported for command: aws")
 			}
 			issues = append(issues, ValidateAWSSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
+		case "kubectl":
+			if hasGitOnlySemanticFields(*match.Semantic) || hasAWSOnlySemanticFields(*match.Semantic) {
+				issues = append(issues, prefix+".semantic contains fields not supported for command: kubectl")
+			}
+			issues = append(issues, ValidateKubectlSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
 		case "":
 		default:
-			issues = append(issues, prefix+".semantic is only supported for command: git or command: aws")
+			issues = append(issues, prefix+".semantic is only supported for command: git, command: aws, or command: kubectl")
 		}
 	}
 	return issues
@@ -1498,6 +1732,57 @@ func ValidateAWSSemanticMatchSpec(prefix string, semantic SemanticMatchSpec) []s
 	issues = append(issues, validateNonEmptyStrings(prefix+".operation_in", semantic.OperationIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".profile_in", semantic.ProfileIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".region_in", semantic.RegionIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".flags_contains", semantic.FlagsContains)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".flags_prefixes", semantic.FlagsPrefixes)...)
+	return issues
+}
+
+func ValidateKubectlSemanticMatchSpec(prefix string, semantic SemanticMatchSpec) []string {
+	var issues []string
+	if IsZeroSemanticMatchSpec(semantic) {
+		issues = append(issues, prefix+" must not be empty")
+	}
+	if strings.TrimSpace(semantic.Verb) == "" && semantic.Verb != "" {
+		issues = append(issues, prefix+".verb must be non-empty")
+	}
+	if strings.TrimSpace(semantic.Subverb) == "" && semantic.Subverb != "" {
+		issues = append(issues, prefix+".subverb must be non-empty")
+	}
+	if strings.TrimSpace(semantic.ResourceType) == "" && semantic.ResourceType != "" {
+		issues = append(issues, prefix+".resource_type must be non-empty")
+	}
+	if strings.TrimSpace(semantic.ResourceName) == "" && semantic.ResourceName != "" {
+		issues = append(issues, prefix+".resource_name must be non-empty")
+	}
+	if strings.TrimSpace(semantic.Namespace) == "" && semantic.Namespace != "" {
+		issues = append(issues, prefix+".namespace must be non-empty")
+	}
+	if strings.TrimSpace(semantic.Context) == "" && semantic.Context != "" {
+		issues = append(issues, prefix+".context must be non-empty")
+	}
+	if strings.TrimSpace(semantic.Kubeconfig) == "" && semantic.Kubeconfig != "" {
+		issues = append(issues, prefix+".kubeconfig must be non-empty")
+	}
+	if strings.TrimSpace(semantic.Filename) == "" && semantic.Filename != "" {
+		issues = append(issues, prefix+".filename must be non-empty")
+	}
+	if strings.TrimSpace(semantic.FilenamePrefix) == "" && semantic.FilenamePrefix != "" {
+		issues = append(issues, prefix+".filename_prefix must be non-empty")
+	}
+	if strings.TrimSpace(semantic.Selector) == "" && semantic.Selector != "" {
+		issues = append(issues, prefix+".selector must be non-empty")
+	}
+	if strings.TrimSpace(semantic.Container) == "" && semantic.Container != "" {
+		issues = append(issues, prefix+".container must be non-empty")
+	}
+	issues = append(issues, validateNonEmptyStrings(prefix+".verb_in", semantic.VerbIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".subverb_in", semantic.SubverbIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".resource_type_in", semantic.ResourceTypeIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".resource_name_in", semantic.ResourceNameIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".namespace_in", semantic.NamespaceIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".context_in", semantic.ContextIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".filename_in", semantic.FilenameIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".selector_contains", semantic.SelectorContains)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".flags_contains", semantic.FlagsContains)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".flags_prefixes", semantic.FlagsPrefixes)...)
 	return issues
@@ -1613,7 +1898,7 @@ func IsZeroMatchSpec(match MatchSpec) bool {
 }
 
 func IsZeroSemanticMatchSpec(semantic SemanticMatchSpec) bool {
-	return !hasGitSemanticFields(semantic) && !hasAWSSemanticFields(semantic) &&
+	return !hasGitSemanticFields(semantic) && !hasAWSSemanticFields(semantic) && !hasKubectlSemanticFields(semantic) &&
 		len(semantic.FlagsContains) == 0 &&
 		len(semantic.FlagsPrefixes) == 0
 }
@@ -1621,21 +1906,30 @@ func IsZeroSemanticMatchSpec(semantic SemanticMatchSpec) bool {
 func hasGitSemanticFields(semantic SemanticMatchSpec) bool {
 	return semantic.Verb != "" ||
 		len(semantic.VerbIn) > 0 ||
-		semantic.Remote != "" ||
+		hasGitOnlySemanticFields(semantic) ||
+		semantic.Force != nil ||
+		semantic.Recursive != nil
+}
+
+func hasGitOnlySemanticFields(semantic SemanticMatchSpec) bool {
+	return semantic.Remote != "" ||
 		len(semantic.RemoteIn) > 0 ||
 		semantic.Branch != "" ||
 		len(semantic.BranchIn) > 0 ||
 		semantic.Ref != "" ||
 		len(semantic.RefIn) > 0 ||
-		semantic.Force != nil ||
 		semantic.Hard != nil ||
-		semantic.Recursive != nil ||
 		semantic.IncludeIgnored != nil ||
 		semantic.Cached != nil ||
 		semantic.Staged != nil
 }
 
 func hasAWSSemanticFields(semantic SemanticMatchSpec) bool {
+	return hasAWSOnlySemanticFields(semantic) ||
+		semantic.DryRun != nil
+}
+
+func hasAWSOnlySemanticFields(semantic SemanticMatchSpec) bool {
 	return semantic.Service != "" ||
 		len(semantic.ServiceIn) > 0 ||
 		semantic.Operation != "" ||
@@ -1646,8 +1940,37 @@ func hasAWSSemanticFields(semantic SemanticMatchSpec) bool {
 		len(semantic.RegionIn) > 0 ||
 		semantic.EndpointURL != "" ||
 		semantic.EndpointURLPrefix != "" ||
-		semantic.DryRun != nil ||
 		semantic.NoCLIPager != nil
+}
+
+func hasKubectlSemanticFields(semantic SemanticMatchSpec) bool {
+	return semantic.Verb != "" ||
+		len(semantic.VerbIn) > 0 ||
+		semantic.Force != nil ||
+		semantic.Recursive != nil ||
+		semantic.DryRun != nil ||
+		hasKubectlOnlySemanticFields(semantic)
+}
+
+func hasKubectlOnlySemanticFields(semantic SemanticMatchSpec) bool {
+	return semantic.Subverb != "" ||
+		len(semantic.SubverbIn) > 0 ||
+		semantic.ResourceType != "" ||
+		len(semantic.ResourceTypeIn) > 0 ||
+		semantic.ResourceName != "" ||
+		len(semantic.ResourceNameIn) > 0 ||
+		semantic.Namespace != "" ||
+		len(semantic.NamespaceIn) > 0 ||
+		semantic.Context != "" ||
+		len(semantic.ContextIn) > 0 ||
+		semantic.Kubeconfig != "" ||
+		semantic.AllNamespaces != nil ||
+		semantic.Filename != "" ||
+		len(semantic.FilenameIn) > 0 ||
+		semantic.FilenamePrefix != "" ||
+		semantic.Selector != "" ||
+		len(semantic.SelectorContains) > 0 ||
+		semantic.Container != ""
 }
 
 func IsZeroMoveFlagToEnvSpec(spec MoveFlagToEnvSpec) bool {
@@ -1688,9 +2011,27 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
+func containsAnyString(values []string, wants []string) bool {
+	for _, want := range wants {
+		if containsString(values, want) {
+			return true
+		}
+	}
+	return false
+}
+
 func containsPrefix(values []string, prefix string) bool {
 	for _, value := range values {
 		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSubstring(values []string, substr string) bool {
+	for _, value := range values {
+		if strings.Contains(value, substr) {
 			return true
 		}
 	}

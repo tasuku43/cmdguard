@@ -395,6 +395,66 @@ func TestPermissionRuleMatchesAWSSemantic(t *testing.T) {
 	}
 }
 
+func TestPermissionRuleMatchesKubectlSemantic(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		match   MatchSpec
+		want    bool
+	}{
+		{
+			name:    "get pods",
+			command: "kubectl get pods",
+			match:   MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Verb: "get", ResourceType: "pods"}},
+			want:    true,
+		},
+		{
+			name:    "namespace and context",
+			command: "kubectl --namespace=prod --context=prod-cluster get pods",
+			match:   MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Namespace: "prod", Context: "prod-cluster"}},
+			want:    true,
+		},
+		{
+			name:    "delete deployment force",
+			command: "kubectl delete deployment/foo --force",
+			match:   MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Verb: "delete", ResourceType: "deployment", Force: boolPtr(true)}},
+			want:    true,
+		},
+		{
+			name:    "wrong verb",
+			command: "kubectl get pods",
+			match:   MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Verb: "delete"}},
+			want:    false,
+		},
+		{
+			name:    "missing namespace",
+			command: "kubectl get pods",
+			match:   MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Namespace: "prod"}},
+			want:    false,
+		},
+		{
+			name:    "dry run absent",
+			command: "kubectl apply -f deployment.yaml",
+			match:   MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{DryRun: boolPtr(true)}},
+			want:    false,
+		},
+		{
+			name:    "generic fallback does not satisfy kubectl semantic",
+			command: "unknown get pods",
+			match:   MatchSpec{Command: "unknown", Semantic: &SemanticMatchSpec{Verb: "get"}},
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.match.MatchMatches(tt.command); got != tt.want {
+				t.Fatalf("MatchMatches(%q)=%v, want %v", tt.command, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMatchSpecAWSSemanticRequiresAWSParserData(t *testing.T) {
 	match := MatchSpec{Command: "aws", Semantic: &SemanticMatchSpec{Service: "sts"}}
 	cmd := commandpkg.Command{
@@ -456,6 +516,57 @@ func TestMatchSpecGitSemanticRequiresGitParserData(t *testing.T) {
 	}
 	if match.matches(cmd) {
 		t.Fatal("generic parser command satisfied git semantic match")
+	}
+}
+
+func TestMatchSpecKubectlSemanticRequiresKubectlParserData(t *testing.T) {
+	match := MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Verb: "get"}}
+	cmd := commandpkg.Command{
+		Raw:      "kubectl get pods",
+		Program:  "kubectl",
+		RawWords: []string{"get", "pods"},
+		Parser:   "generic",
+	}
+	if match.matches(cmd) {
+		t.Fatal("generic parser command satisfied kubectl semantic match")
+	}
+}
+
+func TestEvaluateKubectlSemanticPermissionOutcomes(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Deny: []PermissionRuleSpec{{
+				Match:   MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Verb: "delete", ResourceType: "pod", Namespace: "prod"}},
+				Message: "deleting production Kubernetes resources is blocked",
+			}},
+			Ask: []PermissionRuleSpec{{
+				Match:   MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{VerbIn: []string{"apply", "patch", "scale", "rollout", "delete"}}},
+				Message: "Kubernetes mutation requires confirmation",
+			}},
+			Allow: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{VerbIn: []string{"get", "describe", "logs"}, Namespace: "default"}},
+			}},
+		},
+	}, Source{})
+
+	tests := []struct {
+		command string
+		want    string
+	}{
+		{command: "kubectl -n prod delete pod/foo", want: "deny"},
+		{command: "kubectl apply -f deployment.yaml", want: "ask"},
+		{command: "kubectl get pods -n default", want: "allow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			got, err := Evaluate(p, tt.command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != tt.want {
+				t.Fatalf("Outcome=%q, want %q; decision=%+v", got.Outcome, tt.want, got)
+			}
+		})
 	}
 }
 
@@ -546,6 +657,36 @@ func TestEvaluateTraceIncludesAWSSemanticInfo(t *testing.T) {
 		t.Fatalf("trace step missing aws semantic info: %+v", last)
 	}
 	for _, field := range []string{"service", "operation", "profile", "region"} {
+		if !containsString(last.SemanticFields, field) {
+			t.Fatalf("SemanticFields=%#v, want %q", last.SemanticFields, field)
+		}
+	}
+}
+
+func TestEvaluateTraceIncludesKubectlSemanticInfo(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Verb: "get", ResourceType: "pods", Namespace: "default", Context: "dev"}},
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "kubectl --context dev get pods -n default")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if len(got.Trace) == 0 {
+		t.Fatalf("trace empty")
+	}
+	last := got.Trace[len(got.Trace)-1]
+	if last.Parser != "kubectl" || last.SemanticParser != "kubectl" || !last.SemanticMatch {
+		t.Fatalf("trace step missing parser/semantic info: %+v", last)
+	}
+	if last.KubectlVerb != "get" || last.KubectlResourceType != "pods" || last.KubectlNamespace != "default" || last.KubectlContext != "dev" {
+		t.Fatalf("trace step missing kubectl semantic info: %+v", last)
+	}
+	for _, field := range []string{"verb", "resource_type", "namespace", "context"} {
 		if !containsString(last.SemanticFields, field) {
 			t.Fatalf("SemanticFields=%#v, want %q", last.SemanticFields, field)
 		}
@@ -1526,7 +1667,7 @@ func TestValidateSemanticMatchRules(t *testing.T) {
 			spec: PipelineSpec{Permission: PermissionSpec{Deny: []PermissionRuleSpec{{
 				Match: MatchSpec{Command: "ls", Semantic: &SemanticMatchSpec{Verb: "push"}},
 			}}}},
-			issue: "permission.deny[0].match.semantic is only supported for command: git or command: aws",
+			issue: "permission.deny[0].match.semantic is only supported for command: git, command: aws, or command: kubectl",
 		},
 		{
 			name: "git command with aws semantic fields",
@@ -1541,6 +1682,20 @@ func TestValidateSemanticMatchRules(t *testing.T) {
 				Match: MatchSpec{Command: "aws", Semantic: &SemanticMatchSpec{Verb: "push"}},
 			}}}},
 			issue: "permission.deny[0].match.semantic contains fields not supported for command: aws",
+		},
+		{
+			name: "aws command with kubectl semantic fields",
+			spec: PipelineSpec{Permission: PermissionSpec{Deny: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "aws", Semantic: &SemanticMatchSpec{Namespace: "prod"}},
+			}}}},
+			issue: "permission.deny[0].match.semantic contains fields not supported for command: aws",
+		},
+		{
+			name: "kubectl command with aws semantic fields",
+			spec: PipelineSpec{Permission: PermissionSpec{Deny: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "kubectl", Semantic: &SemanticMatchSpec{Service: "s3"}},
+			}}}},
+			issue: "permission.deny[0].match.semantic contains fields not supported for command: kubectl",
 		},
 		{
 			name: "subcommand with semantic verb",

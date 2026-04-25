@@ -370,7 +370,7 @@ test:
   - in: "git push"
     decision: deny
 `,
-			want: "field namespace not found",
+			want: "semantic contains fields not supported for command: git",
 		},
 		{
 			name: "unsupported semantic type",
@@ -404,7 +404,7 @@ test:
   - in: "aws sts get-caller-identity"
     decision: deny
 `,
-			want: "field namespace not found",
+			want: "semantic contains fields not supported for command: aws",
 		},
 		{
 			name: "unsupported aws semantic type",
@@ -440,6 +440,58 @@ test:
     decision: deny
 `,
 			want: "field aws not found",
+		},
+		{
+			name: "unknown kubectl semantic field",
+			body: `permission:
+  deny:
+    - match:
+        command: kubectl
+        semantic:
+          service: s3
+      test:
+        deny: ["kubectl get pods"]
+        pass: ["kubectl describe pods"]
+test:
+  - in: "kubectl get pods"
+    decision: deny
+`,
+			want: "semantic contains fields not supported for command: kubectl",
+		},
+		{
+			name: "unsupported kubectl semantic type",
+			body: `permission:
+  deny:
+    - match:
+        command: kubectl
+        semantic:
+          all_namespaces: "true"
+      test:
+        deny: ["kubectl get pods -A"]
+        pass: ["kubectl get pods"]
+test:
+  - in: "kubectl get pods -A"
+    decision: deny
+`,
+			want: "cannot unmarshal !!str `true` into bool",
+		},
+		{
+			name: "nested kubectl semantic key",
+			body: `permission:
+  deny:
+    - match:
+        command: kubectl
+        semantic:
+          kubectl:
+            verb: get
+      test:
+        deny: ["kubectl get pods"]
+        pass: ["kubectl describe pods"]
+test:
+  - in: "kubectl get pods"
+    decision: deny
+`,
+			want: "field kubectl not found",
 		},
 	}
 
