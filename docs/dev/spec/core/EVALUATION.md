@@ -72,7 +72,8 @@ Rewrite evaluation order is fixed and deterministic.
    - if the step has `match`, require it to match
    - attempt the single configured rewrite primitive
 3. If the rewrite succeeds:
-   - record a rewrite trace step
+   - parse the rewritten command into a fresh `CommandPlan`
+   - record a rewrite trace step with before/after shell shape and safety
    - if `continue: true`, continue evaluating later rewrite steps against the rewritten command
    - otherwise stop the rewrite phase early
 
@@ -80,6 +81,14 @@ If a rewrite step is considered but cannot safely rewrite the invocation, it is
 a no-op and evaluation continues.
 
 Rewrite is policy-preserving canonicalization, not arbitrary transformation.
+Each successful step must preserve the evaluation safety boundary. A rewrite
+must not convert a safe command plan into an unsafe command plan, and must not
+change a `simple` shell shape into `compound` or `unknown`. If a rewrite
+violates this invariant, the rewritten command remains the final command under
+evaluation, the rewrite trace records `effect: fail_closed`, and permission
+evaluation treats the command as unsafe so automatic `allow` is unavailable.
+This rule also applies to every intermediate step in a `continue: true` rewrite
+chain.
 
 Examples:
 
@@ -90,8 +99,9 @@ Examples:
 
 ## 6. Permission Phase
 
-After the rewrite phase finishes, `cc-bash-proxy` evaluates permission rules against
-the resulting command.
+After the rewrite phase finishes, `cc-bash-proxy` evaluates permission rules
+only against the resulting command. Permission rules do not evaluate the
+original command or intermediate rewrite-chain states.
 
 The full effective order is fixed:
 

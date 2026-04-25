@@ -138,6 +138,12 @@ type TraceStep struct {
 	CommandIndex   *int     `json:"command_index,omitempty"`
 	Parser         string   `json:"parser,omitempty"`
 	SemanticParser string   `json:"semantic_parser,omitempty"`
+	FromShape      string   `json:"from_shape,omitempty"`
+	FromShapeFlags []string `json:"from_shape_flags,omitempty"`
+	FromSafe       *bool    `json:"from_safe,omitempty"`
+	ToShape        string   `json:"to_shape,omitempty"`
+	ToShapeFlags   []string `json:"to_shape_flags,omitempty"`
+	ToSafe         *bool    `json:"to_safe,omitempty"`
 	Program        string   `json:"program,omitempty"`
 	ActionPath     []string `json:"action_path,omitempty"`
 	Shape          string   `json:"shape,omitempty"`
@@ -264,6 +270,7 @@ func sourcePtr(src Source) *Source {
 func Evaluate(p Pipeline, command string) (Decision, error) {
 	current := command
 	trace := []TraceStep{}
+	rewriteSafetyReasons := []string{}
 	prepared := p.prepared
 	if !prepared.Ready {
 		prepared = preparePipeline(stampSources(p.PipelineSpec, p.Source))
@@ -273,20 +280,41 @@ func Evaluate(p Pipeline, command string) (Decision, error) {
 		if !step.Selector.matches(current) {
 			continue
 		}
+		beforePlan := commandpkg.Parse(current)
+		beforeSafety := commandpkg.EvaluationSafetyForPlan(beforePlan)
 		rewritten, ok := applyRewriteStep(step.Spec, current)
 		if !ok {
 			continue
 		}
+		afterPlan := commandpkg.Parse(rewritten)
+		afterSafety := commandpkg.EvaluationSafetyForPlan(afterPlan)
+		invariantReasons := rewriteInvariantViolationReasons(beforePlan, beforeSafety, afterPlan, afterSafety)
+		effect := ""
+		if len(invariantReasons) > 0 {
+			effect = "fail_closed"
+			rewriteSafetyReasons = append(rewriteSafetyReasons, invariantReasons...)
+		}
 		trace = append(trace, TraceStep{
-			Action:   "rewrite",
-			Name:     rewritePrimitiveName(step.Spec),
-			From:     current,
-			To:       rewritten,
-			Relaxed:  !RewriteStrict(step.Spec),
-			Continue: step.Spec.Continue,
-			Source:   sourcePtr(step.Spec.Source),
+			Action:         "rewrite",
+			Name:           rewritePrimitiveName(step.Spec),
+			Effect:         effect,
+			From:           current,
+			To:             rewritten,
+			Reason:         strings.Join(invariantReasons, ","),
+			Relaxed:        !RewriteStrict(step.Spec),
+			Continue:       step.Spec.Continue,
+			Source:         sourcePtr(step.Spec.Source),
+			FromShape:      string(beforePlan.Shape.Kind),
+			FromShapeFlags: beforePlan.Shape.Flags(),
+			FromSafe:       boolPtr(beforeSafety.Safe),
+			ToShape:        string(afterPlan.Shape.Kind),
+			ToShapeFlags:   afterPlan.Shape.Flags(),
+			ToSafe:         boolPtr(afterSafety.Safe),
 		})
 		current = rewritten
+		if len(invariantReasons) > 0 {
+			break
+		}
 		if !step.Spec.Continue {
 			break
 		}
@@ -294,6 +322,10 @@ func Evaluate(p Pipeline, command string) (Decision, error) {
 
 	plan := commandpkg.Parse(current)
 	safety := commandpkg.EvaluationSafetyForPlan(plan)
+	if len(rewriteSafetyReasons) > 0 {
+		safety.Safe = false
+		safety.Reasons = dedupeStrings(append(safety.Reasons, rewriteSafetyReasons...))
+	}
 	if !safety.Safe {
 		trace = append(trace, unsafeCommandTraceStep(plan, safety))
 	}
@@ -346,6 +378,45 @@ func Evaluate(p Pipeline, command string) (Decision, error) {
 
 	trace = append(trace, TraceStep{Action: "permission", Effect: "ask", Name: "default"})
 	return Decision{Outcome: "ask", Command: current, OriginalCommand: command, Trace: trace}, nil
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func rewriteInvariantViolationReasons(beforePlan commandpkg.CommandPlan, beforeSafety commandpkg.EvaluationSafety, afterPlan commandpkg.CommandPlan, afterSafety commandpkg.EvaluationSafety) []string {
+	var reasons []string
+	if beforeSafety.Safe && !afterSafety.Safe {
+		reasons = append(reasons, "rewrite_safe_to_unsafe")
+	}
+	if beforePlan.Shape.Kind == commandpkg.ShellShapeSimple && afterPlan.Shape.Kind != commandpkg.ShellShapeSimple {
+		reasons = append(reasons, "rewrite_simple_to_"+string(afterPlan.Shape.Kind))
+	}
+	if afterPlan.Shape.Kind == commandpkg.ShellShapeUnknown {
+		reasons = append(reasons, "rewrite_unknown_shape")
+	}
+	if !afterSafety.Safe {
+		for _, reason := range afterSafety.Reasons {
+			reasons = append(reasons, "rewrite_"+reason)
+		}
+	}
+	return dedupeStrings(reasons)
+}
+
+func dedupeStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	deduped := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		deduped = append(deduped, value)
+	}
+	return deduped
 }
 
 func unsafeCommandTraceStep(plan commandpkg.CommandPlan, safety commandpkg.EvaluationSafety) TraceStep {

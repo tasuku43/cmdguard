@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"slices"
 	"strconv"
 	"testing"
 
@@ -42,6 +43,85 @@ func TestEvaluateRewriteThenAllow(t *testing.T) {
 	}
 	if got.Outcome != "allow" || got.Command != "AWS_PROFILE=read-only aws sts get-caller-identity" {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestEvaluatePermissionUsesFinalRewrittenCommandOnly(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Rewrite: []RewriteStepSpec{{
+			Match: MatchSpec{Command: "aws", ArgsContains: []string{"--profile"}},
+			MoveFlagToEnv: MoveFlagToEnvSpec{
+				Flag: "--profile",
+				Env:  "AWS_PROFILE",
+			},
+		}},
+		Permission: PermissionSpec{
+			Deny: []PermissionRuleSpec{{
+				Pattern: `^aws --profile read-only `,
+			}},
+			Allow: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "aws", Subcommand: "sts", EnvRequires: []string{"AWS_PROFILE"}},
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "aws --profile read-only sts get-caller-identity")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "allow" {
+		t.Fatalf("Outcome = %q, want allow; decision=%+v", got.Outcome, got)
+	}
+	if got.Command != "AWS_PROFILE=read-only aws sts get-caller-identity" {
+		t.Fatalf("Command = %q, want final rewritten command", got.Command)
+	}
+}
+
+func TestEvaluateRewriteTraceIncludesBeforeAfterSafety(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Rewrite: []RewriteStepSpec{{
+			Match: MatchSpec{Command: "aws", ArgsContains: []string{"--profile"}},
+			MoveFlagToEnv: MoveFlagToEnvSpec{
+				Flag: "--profile",
+				Env:  "AWS_PROFILE",
+			},
+		}},
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{Match: MatchSpec{Command: "aws", Subcommand: "sts", EnvRequires: []string{"AWS_PROFILE"}}}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "aws --profile read-only sts get-caller-identity")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	step := firstTraceStepByName(got.Trace, "move_flag_to_env")
+	if step == nil {
+		t.Fatalf("rewrite trace missing; trace=%+v", got.Trace)
+	}
+	if step.FromShape != "simple" || step.ToShape != "simple" {
+		t.Fatalf("rewrite shapes = (%q, %q), want simple/simple; trace=%+v", step.FromShape, step.ToShape, got.Trace)
+	}
+	if step.FromSafe == nil || step.ToSafe == nil || !*step.FromSafe || !*step.ToSafe {
+		t.Fatalf("rewrite safety = (%v, %v), want true/true; trace=%+v", step.FromSafe, step.ToSafe, got.Trace)
+	}
+}
+
+func TestRewriteInvariantDetectsSafeToUnsafeAndSimpleToCompound(t *testing.T) {
+	before := commandpkg.Parse("git status")
+	after := commandpkg.Parse("git status && echo $(rm -rf /tmp/x)")
+	reasons := rewriteInvariantViolationReasons(
+		before,
+		commandpkg.EvaluationSafetyForPlan(before),
+		after,
+		commandpkg.EvaluationSafetyForPlan(after),
+	)
+
+	if !slices.Contains(reasons, "rewrite_simple_to_compound") {
+		t.Fatalf("reasons=%#v, want rewrite_simple_to_compound", reasons)
+	}
+	if !slices.Contains(reasons, "rewrite_safe_to_unsafe") {
+		t.Fatalf("reasons=%#v, want rewrite_safe_to_unsafe", reasons)
 	}
 }
 

@@ -167,6 +167,16 @@ rules (`match`) and evaluates them in this order:
 5. structured `allow`
 6. raw `allow`, only when `allow_unsafe_shell: true` is set
 
+The rewrite phase is normalization only. Permission rules are evaluated against
+the final rewritten command, not the original input or intermediate rewrite
+states. Every successful rewrite step is parsed before and after the rewrite;
+trace output records the before/after shell shape and whether each side is safe
+for evaluation. A rewrite must not lower safety. In particular, a rewrite from
+`simple` to `compound`, `simple` to `unknown`, or from a safe command plan to an
+unsafe command plan fails closed. When that happens, the rewritten command is
+still the command under evaluation, but `allow` is blocked and the fallback is
+`ask` unless an explicit deny rule matches.
+
 Raw rules are an escape hatch for full-command shell-shape matching. Structured
 rules are the default and preferred permission model. A raw `deny` or `ask`
 pattern for the full command wins before composition, even when every extracted
