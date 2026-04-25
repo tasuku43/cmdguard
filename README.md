@@ -203,6 +203,20 @@ interpret or execute data produced by the left side. Background, redirection,
 subshell, and unknown shapes ask by default unless an extracted command is
 denied.
 
+Process substitution is evaluated with the same fail-closed boundary. Commands
+inside `<(...)` and `>(...)` are extracted and evaluated for deny rules, but the
+whole shell expression is not implicitly allowed by structured or raw allow
+rules unless an unsafe full-expression allow explicitly opts in.
+
+Examples:
+
+- `cat <(rm -rf /tmp/x)`
+  - denied when `rm -rf /tmp/x` matches a deny rule
+- `echo >(sh)`
+  - denied when `sh` matches a deny rule
+- `cat <(git status)`
+  - asks by default even when `cat` and `git status` are individually allowed
+
 Claude settings are interpreted as four states:
 
 - `deny`

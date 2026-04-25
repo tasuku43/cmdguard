@@ -101,6 +101,41 @@ func TestParseCommandPlanPipelineExtractsCommandsButFailsClosed(t *testing.T) {
 	assertNoShellConnectorMetadata(t, plan.Commands)
 }
 
+func TestParseCommandPlanProcessSubstitutionExtractsCommandsButFailsClosed(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{name: "input process substitution", raw: "cat <(rm -rf /tmp/x)", want: []string{"rm -rf /tmp/x", "cat <(rm -rf /tmp/x)"}},
+		{name: "output process substitution", raw: "echo >(sh)", want: []string{"sh", "echo >(sh)"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := Parse(tt.raw)
+			if plan.Shape.Kind != ShellShapeUnknown {
+				t.Fatalf("Shape.Kind = %q, want %q", plan.Shape.Kind, ShellShapeUnknown)
+			}
+			if !plan.Shape.HasProcessSubstitution {
+				t.Fatal("HasProcessSubstitution = false, want true")
+			}
+			if plan.SafeForStructuredAllow {
+				t.Fatal("SafeForStructuredAllow = true, want false")
+			}
+			if len(plan.Commands) != len(tt.want) {
+				t.Fatalf("len(Commands) = %d, want %d; commands=%+v diagnostics=%+v", len(plan.Commands), len(tt.want), plan.Commands, plan.Diagnostics)
+			}
+			for i, want := range tt.want {
+				if plan.Commands[i].Raw != want {
+					t.Fatalf("Commands[%d].Raw = %q, want %q; commands=%+v", i, plan.Commands[i].Raw, want, plan.Commands)
+				}
+			}
+			assertNoShellConnectorMetadata(t, plan.Commands)
+		})
+	}
+}
+
 func TestParseCommandPlanUnsafeShellShapesFailClosed(t *testing.T) {
 	tests := []struct {
 		name string

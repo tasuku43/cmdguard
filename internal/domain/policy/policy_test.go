@@ -737,6 +737,81 @@ func TestEvaluateConservativeShellShapesAskEvenWhenCommandAllowed(t *testing.T) 
 	}
 }
 
+func TestEvaluateProcessSubstitutionCompositionDeniesExtractedCommands(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		deny    PermissionRuleSpec
+		wantCmd string
+	}{
+		{
+			name:    "input process substitution",
+			command: "cat <(rm -rf /tmp/x)",
+			deny:    PermissionRuleSpec{Match: MatchSpec{Command: "rm", ArgsContains: []string{"-rf"}}},
+			wantCmd: "rm -rf /tmp/x",
+		},
+		{
+			name:    "output process substitution",
+			command: "echo >(sh)",
+			deny:    PermissionRuleSpec{Match: MatchSpec{Command: "sh"}},
+			wantCmd: "sh",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewPipeline(PipelineSpec{
+				Permission: PermissionSpec{Deny: []PermissionRuleSpec{tt.deny}},
+			}, Source{})
+
+			got, err := Evaluate(p, tt.command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != "deny" {
+				t.Fatalf("Outcome = %q, want deny; decision=%+v", got.Outcome, got)
+			}
+			steps := traceStepsByName(got.Trace, "composition.command")
+			if len(steps) == 0 {
+				t.Fatalf("composition.command trace missing; trace=%+v", got.Trace)
+			}
+			found := false
+			for _, step := range steps {
+				if step.Command == tt.wantCmd && step.Effect == "deny" {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("denied process substitution command %q not found in trace; trace=%+v", tt.wantCmd, got.Trace)
+			}
+		})
+	}
+}
+
+func TestEvaluateProcessSubstitutionAsksEvenWhenExtractedCommandsAllowed(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{
+				{Match: MatchSpec{Command: "cat"}},
+				{Match: MatchSpec{Command: "git", Subcommand: "status"}},
+			},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "cat <(git status)")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "ask" {
+		t.Fatalf("Outcome = %q, want ask; decision=%+v", got.Outcome, got)
+	}
+	steps := traceStepsByName(got.Trace, "composition.command")
+	if len(steps) != 2 {
+		t.Fatalf("composition.command trace steps = %d, want 2; trace=%+v", len(steps), got.Trace)
+	}
+}
+
 func TestMatchSpecGitSubcommandDoesNotTreatDoubleDashBeforeStatusAsStatus(t *testing.T) {
 	match := MatchSpec{Command: "git", Subcommand: "status"}
 	if match.MatchMatches("git -C repo -- status") {

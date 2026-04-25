@@ -213,6 +213,11 @@ whole command asks. This includes pipelines by design for Claude Code
 compatibility. `background`, `redirect`, `subshell`, and unknown shapes ask by
 default unless an extracted command is denied.
 
+Process substitution is treated as an unknown shape for allow purposes, while
+commands inside `<(...)` and `>(...)` are still extracted for deny evaluation.
+For example, `cat <(rm -rf /tmp/x)` is denied by a deny rule matching
+`rm -rf /tmp/x`, and `echo >(sh)` is denied by a deny rule matching `sh`.
+
 ### Permission `test`
 
 ```yaml

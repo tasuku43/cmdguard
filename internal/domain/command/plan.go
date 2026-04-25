@@ -82,6 +82,7 @@ type ShellShape struct {
 	HasBackground          bool
 	HasRedirection         bool
 	HasCommandSubstitution bool
+	HasProcessSubstitution bool
 }
 
 type ShellShapeKind string
@@ -250,11 +251,16 @@ func (w *planWalker) visitWordPart(part syntax.WordPart) {
 		for _, stmt := range x.Stmts {
 			w.visitStmt(stmt)
 		}
+	case *syntax.ProcSubst:
+		w.shape.HasProcessSubstitution = true
+		for _, stmt := range x.Stmts {
+			w.visitStmt(stmt)
+		}
 	case *syntax.DblQuoted:
 		for _, nested := range x.Parts {
 			w.visitWordPart(nested)
 		}
-	case *syntax.ParamExp, *syntax.ArithmExp, *syntax.ProcSubst, *syntax.ExtGlob, *syntax.BraceExp:
+	case *syntax.ParamExp, *syntax.ArithmExp, *syntax.ExtGlob, *syntax.BraceExp:
 		w.shape.Kind = ShellShapeUnknown
 	}
 }
@@ -295,6 +301,10 @@ func (s ShellShape) finalize() ShellShape {
 		return s
 	}
 	if s.HasCommandSubstitution {
+		s.Kind = ShellShapeUnknown
+		return s
+	}
+	if s.HasProcessSubstitution {
 		s.Kind = ShellShapeUnknown
 		return s
 	}

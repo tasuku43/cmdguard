@@ -204,3 +204,11 @@ For `background`, `redirect`, `subshell`, and `unknown`, the default remains
 ask unless an extracted command is denied. These shapes keep their shell
 composition metadata on `CommandPlan.Shape`; individual `Command` objects do not
 store operator metadata.
+
+Process substitution is an `unknown` shell shape for allow purposes, but its
+inner statement list is still visited. Commands inside `<(...)` and `>(...)`
+are emitted as `composition.command` trace entries and are evaluated in
+`deny -> ask -> allow` order with the other extracted commands. For example,
+`cat <(rm -rf /tmp/x)` is denied when `rm -rf /tmp/x` matches a deny rule, and
+`echo >(sh)` is denied when `sh` matches a deny rule. If no extracted command is
+denied, the whole process-substitution expression still asks by default.

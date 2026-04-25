@@ -394,6 +394,14 @@ func evaluateCommandPlanComposition(deny []preparedPermissionRule, ask []prepare
 		decision.Trace = compositionTrace(plan, decisions, decision)
 		return decision, true
 	case commandpkg.ShellShapeBackground, commandpkg.ShellShapeRedirect, commandpkg.ShellShapeSubshell, commandpkg.ShellShapeUnknown:
+		if plan.Shape.HasProcessSubstitution {
+			decision := compositionDecision{
+				Outcome: "ask",
+				Reason:  "process substitution requires confirmation",
+			}
+			decision.Trace = compositionTrace(plan, decisions, decision)
+			return decision, true
+		}
 		return compositionDecision{}, false
 	default:
 		return compositionDecision{}, false
