@@ -126,15 +126,22 @@ type Decision struct {
 }
 
 type TraceStep struct {
-	Action   string  `json:"action"`
-	Name     string  `json:"name,omitempty"`
-	Effect   string  `json:"effect,omitempty"`
-	From     string  `json:"from,omitempty"`
-	To       string  `json:"to,omitempty"`
-	Message  string  `json:"message,omitempty"`
-	Relaxed  bool    `json:"relaxed,omitempty"`
-	Continue bool    `json:"continue,omitempty"`
-	Source   *Source `json:"source,omitempty"`
+	Action       string   `json:"action"`
+	Name         string   `json:"name,omitempty"`
+	Effect       string   `json:"effect,omitempty"`
+	From         string   `json:"from,omitempty"`
+	To           string   `json:"to,omitempty"`
+	Message      string   `json:"message,omitempty"`
+	Reason       string   `json:"reason,omitempty"`
+	Command      string   `json:"command,omitempty"`
+	CommandIndex *int     `json:"command_index,omitempty"`
+	Parser       string   `json:"parser,omitempty"`
+	Program      string   `json:"program,omitempty"`
+	ActionPath   []string `json:"action_path,omitempty"`
+	Shape        string   `json:"shape,omitempty"`
+	Relaxed      bool     `json:"relaxed,omitempty"`
+	Continue     bool     `json:"continue,omitempty"`
+	Source       *Source  `json:"source,omitempty"`
 }
 
 type preparedPipeline struct {
@@ -290,13 +297,7 @@ func Evaluate(p Pipeline, command string) (Decision, error) {
 		return Decision{Outcome: "allow", Command: current, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
 	}
 	if decision, ok := evaluateCommandPlanComposition(prepared.Deny, prepared.Ask, prepared.Allow, current); ok {
-		trace = append(trace, TraceStep{
-			Action:  "permission",
-			Effect:  decision.Outcome,
-			Name:    "composition",
-			Message: decision.Message,
-			Source:  sourcePtr(decision.Source),
-		})
+		trace = append(trace, decision.Trace...)
 		return Decision{Outcome: decision.Outcome, Command: current, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
 	}
 
@@ -328,12 +329,15 @@ func firstPreparedAllowPermissionMatch(rules []preparedPermissionRule, command s
 type commandDecision struct {
 	Outcome string
 	Rule    PermissionRuleSpec
+	Command commandpkg.Command
 }
 
 type compositionDecision struct {
 	Outcome string
 	Message string
+	Reason  string
 	Source  Source
+	Trace   []TraceStep
 }
 
 func evaluateCommandPlanComposition(deny []preparedPermissionRule, ask []preparedPermissionRule, allow []preparedPermissionRule, raw string) (compositionDecision, bool) {
@@ -347,19 +351,25 @@ func evaluateCommandPlanComposition(deny []preparedPermissionRule, ask []prepare
 		decisions = append(decisions, evaluatePreparedCommand(deny, ask, allow, cmd))
 	}
 
-	if decision, ok := firstCommandDecision(decisions, "deny"); ok {
-		return compositionDecision{
+	if decision, index, ok := firstCommandDecision(decisions, "deny"); ok {
+		decision := compositionDecision{
 			Outcome: "deny",
 			Message: decision.Rule.Message,
 			Source:  decision.Rule.Source,
-		}, true
+			Reason:  fmt.Sprintf("command[%d] denied", index),
+		}
+		decision.Trace = compositionTrace(plan, decisions, decision)
+		return decision, true
 	}
-	if decision, ok := firstCommandDecision(decisions, "ask"); ok {
-		return compositionDecision{
+	if decision, index, ok := firstCommandDecision(decisions, "ask"); ok {
+		decision := compositionDecision{
 			Outcome: "ask",
 			Message: decision.Rule.Message,
 			Source:  decision.Rule.Source,
-		}, true
+			Reason:  fmt.Sprintf("command[%d] asked", index),
+		}
+		decision.Trace = compositionTrace(plan, decisions, decision)
+		return decision, true
 	}
 
 	allAllowed := true
@@ -375,11 +385,14 @@ func evaluateCommandPlanComposition(deny []preparedPermissionRule, ask []prepare
 
 	switch plan.Shape.Kind {
 	case commandpkg.ShellShapeAndList, commandpkg.ShellShapeSequence, commandpkg.ShellShapeOrList, commandpkg.ShellShapePipeline:
-		return compositionDecision{
+		decision := compositionDecision{
 			Outcome: "allow",
 			Message: decisions[0].Rule.Message,
 			Source:  decisions[0].Rule.Source,
-		}, true
+			Reason:  "all commands allowed",
+		}
+		decision.Trace = compositionTrace(plan, decisions, decision)
+		return decision, true
 	case commandpkg.ShellShapeBackground, commandpkg.ShellShapeRedirect, commandpkg.ShellShapeSubshell, commandpkg.ShellShapeUnknown:
 		return compositionDecision{}, false
 	default:
@@ -389,24 +402,53 @@ func evaluateCommandPlanComposition(deny []preparedPermissionRule, ask []prepare
 
 func evaluatePreparedCommand(deny []preparedPermissionRule, ask []preparedPermissionRule, allow []preparedPermissionRule, cmd commandpkg.Command) commandDecision {
 	if rule, ok := firstPreparedCommandMatch(deny, cmd); ok {
-		return commandDecision{Outcome: "deny", Rule: rule}
+		return commandDecision{Outcome: "deny", Rule: rule, Command: cmd}
 	}
 	if rule, ok := firstPreparedCommandMatch(ask, cmd); ok {
-		return commandDecision{Outcome: "ask", Rule: rule}
+		return commandDecision{Outcome: "ask", Rule: rule, Command: cmd}
 	}
 	if rule, ok := firstPreparedCommandAllowMatch(allow, cmd); ok {
-		return commandDecision{Outcome: "allow", Rule: rule}
+		return commandDecision{Outcome: "allow", Rule: rule, Command: cmd}
 	}
-	return commandDecision{Outcome: "ask"}
+	return commandDecision{Outcome: "ask", Command: cmd}
 }
 
-func firstCommandDecision(decisions []commandDecision, outcome string) (commandDecision, bool) {
-	for _, decision := range decisions {
+func firstCommandDecision(decisions []commandDecision, outcome string) (commandDecision, int, bool) {
+	for i, decision := range decisions {
 		if decision.Outcome == outcome {
-			return decision, true
+			return decision, i, true
 		}
 	}
-	return commandDecision{}, false
+	return commandDecision{}, -1, false
+}
+
+func compositionTrace(plan commandpkg.CommandPlan, decisions []commandDecision, decision compositionDecision) []TraceStep {
+	trace := make([]TraceStep, 0, len(decisions)+1)
+	for i, commandDecision := range decisions {
+		index := i
+		cmd := commandDecision.Command
+		trace = append(trace, TraceStep{
+			Action:       "permission",
+			Name:         "composition.command",
+			Effect:       commandDecision.Outcome,
+			Command:      cmd.Raw,
+			CommandIndex: &index,
+			Parser:       cmd.Parser,
+			Program:      cmd.Program,
+			ActionPath:   append([]string(nil), cmd.ActionPath...),
+			Source:       sourcePtr(commandDecision.Rule.Source),
+		})
+	}
+	trace = append(trace, TraceStep{
+		Action:  "permission",
+		Effect:  decision.Outcome,
+		Name:    "composition",
+		Message: decision.Message,
+		Reason:  decision.Reason,
+		Shape:   string(plan.Shape.Kind),
+		Source:  sourcePtr(decision.Source),
+	})
+	return trace
 }
 
 func firstPreparedCommandMatch(rules []preparedPermissionRule, cmd commandpkg.Command) (PermissionRuleSpec, bool) {

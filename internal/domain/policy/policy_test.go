@@ -436,6 +436,103 @@ func TestEvaluateCompoundAskWinsUnlessACommandIsDenied(t *testing.T) {
 	}
 }
 
+func TestEvaluateCompoundTraceIncludesPerCommandComposition(t *testing.T) {
+	src := Source{Layer: "project", Path: "/repo/.cc-bash-proxy/cc-bash-proxy.yml"}
+	gitRule := func(subcommand string) PermissionRuleSpec {
+		return PermissionRuleSpec{Match: MatchSpec{Command: "git", Subcommand: subcommand}}
+	}
+
+	tests := []struct {
+		name        string
+		command     string
+		permission  PermissionSpec
+		wantOutcome string
+		wantReason  string
+		wantEffects []string
+		wantRaws    []string
+	}{
+		{
+			name:    "allowed git status and diff",
+			command: "git status && git diff",
+			permission: PermissionSpec{Allow: []PermissionRuleSpec{
+				gitRule("status"),
+				gitRule("diff"),
+			}},
+			wantOutcome: "allow",
+			wantReason:  "all commands allowed",
+			wantEffects: []string{"allow", "allow"},
+			wantRaws:    []string{"git status", "git diff"},
+		},
+		{
+			name:    "rm denied",
+			command: "git status && rm -rf /tmp/x",
+			permission: PermissionSpec{
+				Allow: []PermissionRuleSpec{gitRule("status")},
+				Deny:  []PermissionRuleSpec{{Match: MatchSpec{Command: "rm"}}},
+			},
+			wantOutcome: "deny",
+			wantReason:  "command[1] denied",
+			wantEffects: []string{"allow", "deny"},
+			wantRaws:    []string{"git status", "rm -rf /tmp/x"},
+		},
+		{
+			name:    "unknown command asks by default",
+			command: "git status && unknown-command",
+			permission: PermissionSpec{
+				Allow: []PermissionRuleSpec{gitRule("status")},
+			},
+			wantOutcome: "ask",
+			wantReason:  "command[1] asked",
+			wantEffects: []string{"allow", "ask"},
+			wantRaws:    []string{"git status", "unknown-command"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewPipeline(PipelineSpec{Permission: tt.permission}, src)
+
+			got, err := Evaluate(p, tt.command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != tt.wantOutcome {
+				t.Fatalf("Outcome = %q, want %q; decision=%+v", got.Outcome, tt.wantOutcome, got)
+			}
+
+			commandSteps := traceStepsByName(got.Trace, "composition.command")
+			if len(commandSteps) != len(tt.wantRaws) {
+				t.Fatalf("composition command steps = %d, want %d; trace=%+v", len(commandSteps), len(tt.wantRaws), got.Trace)
+			}
+			for i, step := range commandSteps {
+				if step.CommandIndex == nil || *step.CommandIndex != i {
+					t.Fatalf("command step %d index=%v; trace=%+v", i, step.CommandIndex, got.Trace)
+				}
+				if step.Command != tt.wantRaws[i] {
+					t.Fatalf("command step %d raw=%q, want %q; trace=%+v", i, step.Command, tt.wantRaws[i], got.Trace)
+				}
+				if step.Effect != tt.wantEffects[i] {
+					t.Fatalf("command step %d effect=%q, want %q; trace=%+v", i, step.Effect, tt.wantEffects[i], got.Trace)
+				}
+				if step.Parser == "" || step.Program == "" {
+					t.Fatalf("command step %d missing parser/program: %+v", i, step)
+				}
+				if i == 0 && len(step.ActionPath) != 1 {
+					t.Fatalf("command step %d action_path=%#v, want one action", i, step.ActionPath)
+				}
+				if step.Effect != "ask" && step.Source == nil {
+					t.Fatalf("command step %d source=nil, want matched rule source; trace=%+v", i, got.Trace)
+				}
+			}
+
+			final := got.Trace[len(got.Trace)-1]
+			if final.Name != "composition" || final.Shape != "and_list" || final.Effect != tt.wantOutcome || final.Reason != tt.wantReason {
+				t.Fatalf("final composition trace=%+v, want effect=%q shape=and_list reason=%q", final, tt.wantOutcome, tt.wantReason)
+			}
+		})
+	}
+}
+
 func TestEvaluateCompoundDoesNotInferAllowFromLeftSideRawRule(t *testing.T) {
 	p := NewPipeline(PipelineSpec{
 		Permission: PermissionSpec{
@@ -507,6 +604,16 @@ func TestMatchSpecGitSubcommandDoesNotTreatDoubleDashBeforeStatusAsStatus(t *tes
 	if match.MatchMatches("git -C repo -- status") {
 		t.Fatal("MatchMatches() = true, want false")
 	}
+}
+
+func traceStepsByName(trace []TraceStep, name string) []TraceStep {
+	var steps []TraceStep
+	for _, step := range trace {
+		if step.Name == name {
+			steps = append(steps, step)
+		}
+	}
+	return steps
 }
 
 func TestEvaluatePatternAllowFailsClosedOnUnsafeShellExpressions(t *testing.T) {
