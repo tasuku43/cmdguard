@@ -28,6 +28,17 @@ tasks:
     cmds:
       - go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
+  mod:tidy-check:
+    desc: Verify go.mod and go.sum are tidy
+    cmds:
+      - |
+        tmpdir="$(mktemp -d)"
+        trap 'rm -rf "${tmpdir}"' EXIT
+        cp go.mod go.sum "${tmpdir}/"
+        go mod tidy
+        diff -u "${tmpdir}/go.mod" go.mod
+        diff -u "${tmpdir}/go.sum" go.sum
+
   release:preflight:
     desc: Run pre-release verification checks
     cmds:
@@ -38,6 +49,7 @@ tasks:
           echo "${unformatted}"
           exit 1
         fi
+      - task: mod:tidy-check
       - task: vet
       - task: test
       - task: vulncheck

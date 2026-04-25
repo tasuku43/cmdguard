@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.25.8"
           cache: true
@@ -34,6 +34,15 @@ jobs:
             echo "${unformatted}"
             exit 1
           fi
+
+      - name: go mod tidy
+        run: |
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "${tmpdir}"' EXIT
+          cp go.mod go.sum "${tmpdir}/"
+          go mod tidy
+          diff -u "${tmpdir}/go.mod" go.mod
+          diff -u "${tmpdir}/go.sum" go.sum
 
       - name: go vet
         run: go vet ./...
@@ -52,10 +61,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.25.8"
           cache: true
