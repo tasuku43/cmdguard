@@ -178,11 +178,19 @@ Examples:
 - `git status && rm -rf /tmp/x`
   - denied when `rm -rf /tmp/x` matches a deny rule
 
-The pipeline behavior is also Claude-Code-compatible: `git status | sh`
-requires both `git status` and `sh` to be individually allowed. This is
-intentionally conservative because the right side of a pipeline can interpret
-or execute data produced by the left side. Background, redirection, subshell,
-and unknown shapes ask by default unless an extracted command is denied.
+Pipeline commands use the same independent command evaluation:
+
+- `git status | sh`
+  - asks when `git status` is allowed but `sh` is not allowed
+- `git status | sh`
+  - allowed when both `git status` and `sh` are allowed
+
+An allow rule for the left side of a pipeline never implicitly allows the right
+side. This is intentionally conservative compared with broad raw wildcard
+matching across the full shell string, because the right side of a pipeline can
+interpret or execute data produced by the left side. Background, redirection,
+subshell, and unknown shapes ask by default unless an extracted command is
+denied.
 
 Claude settings are interpreted as four states:
 
