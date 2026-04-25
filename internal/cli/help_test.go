@@ -27,8 +27,6 @@ func TestHelpMatchExplainsSemantic(t *testing.T) {
 		"cc-bash-proxy help semantic",
 		"Permission rules do not use match or pattern",
 		"patterns",
-		"rewrite.match is separate and unchanged",
-		"semantic: unsupported for rewrite.match",
 		"command.name",
 		"semantic.flags_contains",
 	} {

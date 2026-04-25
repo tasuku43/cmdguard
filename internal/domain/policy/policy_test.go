@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -9,54 +8,30 @@ import (
 	commandpkg "github.com/tasuku43/cc-bash-proxy/internal/domain/command"
 )
 
-func TestEvaluateRewriteThenAllow(t *testing.T) {
+func TestEvaluateAWSProfileSemanticDoesNotRewriteCommand(t *testing.T) {
 	p := NewPipeline(PipelineSpec{
-		Rewrite: []RewriteStepSpec{{
-			Match: MatchSpec{Command: "aws", ArgsContains: []string{"--profile"}},
-			MoveFlagToEnv: MoveFlagToEnvSpec{
-				Flag: "--profile",
-				Env:  "AWS_PROFILE",
-			},
-			Test: RewriteTestSpec{
-				{In: "aws --profile read-only sts get-caller-identity", Out: "AWS_PROFILE=read-only aws sts get-caller-identity"},
-				{Pass: "AWS_PROFILE=read-only aws sts get-caller-identity"},
-			},
-		}},
 		Permission: PermissionSpec{
 			Allow: []PermissionRuleSpec{{
-				Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts"}},
-				Env:     PermissionEnvSpec{Requires: []string{"AWS_PROFILE"}},
-				Test: PermissionTestSpec{
-					Allow: []string{"AWS_PROFILE=read-only aws sts get-caller-identity"},
-					Pass:  []string{"AWS_PROFILE=read-only aws s3 ls"},
-				},
+				Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts", Operation: "get-caller-identity", Profile: "read-only"}},
 			}},
 		},
-		Test: PipelineTestSpec{{
-			In:        "aws --profile read-only sts get-caller-identity",
-			Rewritten: "AWS_PROFILE=read-only aws sts get-caller-identity",
-			Decision:  "allow",
-		}},
 	}, Source{})
 
 	got, err := Evaluate(p, "aws --profile read-only sts get-caller-identity")
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
-	if got.Outcome != "allow" || got.Command != "AWS_PROFILE=read-only aws sts get-caller-identity" {
+	if got.Outcome != "allow" || got.Command != "aws --profile read-only sts get-caller-identity" {
 		t.Fatalf("got %+v", got)
+	}
+	last := got.Trace[len(got.Trace)-1]
+	if last.AWSProfile != "read-only" {
+		t.Fatalf("AWSProfile = %q, want read-only; trace=%+v", last.AWSProfile, got.Trace)
 	}
 }
 
-func TestEvaluatePermissionUsesFinalRewrittenCommandOnly(t *testing.T) {
+func TestEvaluatePermissionUsesOriginalCommandForRawPatterns(t *testing.T) {
 	p := NewPipeline(PipelineSpec{
-		Rewrite: []RewriteStepSpec{{
-			Match: MatchSpec{Command: "aws", ArgsContains: []string{"--profile"}},
-			MoveFlagToEnv: MoveFlagToEnvSpec{
-				Flag: "--profile",
-				Env:  "AWS_PROFILE",
-			},
-		}},
 		Permission: PermissionSpec{
 			Deny: []PermissionRuleSpec{{
 				Patterns: []string{`^aws --profile read-only `},
@@ -72,59 +47,228 @@ func TestEvaluatePermissionUsesFinalRewrittenCommandOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
-	if got.Outcome != "allow" {
-		t.Fatalf("Outcome = %q, want allow; decision=%+v", got.Outcome, got)
-	}
-	if got.Command != "AWS_PROFILE=read-only aws sts get-caller-identity" {
-		t.Fatalf("Command = %q, want final rewritten command", got.Command)
+	if got.Outcome != "deny" {
+		t.Fatalf("Outcome = %q, want deny; decision=%+v", got.Outcome, got)
 	}
 }
 
-func TestEvaluateRewriteTraceIncludesBeforeAfterSafety(t *testing.T) {
+func TestEvaluateShellDashCBuiltInEvaluationAllowsInnerCommand(t *testing.T) {
 	p := NewPipeline(PipelineSpec{
-		Rewrite: []RewriteStepSpec{{
-			Match: MatchSpec{Command: "aws", ArgsContains: []string{"--profile"}},
-			MoveFlagToEnv: MoveFlagToEnvSpec{
-				Flag: "--profile",
-				Env:  "AWS_PROFILE",
-			},
-		}},
 		Permission: PermissionSpec{
-			Allow: []PermissionRuleSpec{{Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts"}}, Env: PermissionEnvSpec{Requires: []string{"AWS_PROFILE"}}}},
+			Allow: []PermissionRuleSpec{{
+				Command: PermissionCommandSpec{Name: "git", Semantic: &SemanticMatchSpec{Verb: "status"}},
+			}},
 		},
 	}, Source{})
 
-	got, err := Evaluate(p, "aws --profile read-only sts get-caller-identity")
-	if err != nil {
-		t.Fatalf("Evaluate() error = %v", err)
+	commands := []string{
+		"git status",
+		"bash -c 'git status'",
+		"sh -c 'git status'",
+		"/bin/bash -c 'git status'",
+		"env bash -c 'git status'",
+		"/usr/bin/env bash -c 'git status'",
+		"command bash -c 'git status'",
+		"exec sh -c 'git status'",
+		"sudo bash -c 'git status'",
+		"sudo -u root bash -c 'git status'",
+		"nohup bash -c 'git status'",
+		"timeout 10 bash -c 'git status'",
+		"busybox sh -c 'git status'",
 	}
-	step := firstTraceStepByName(got.Trace, "move_flag_to_env")
-	if step == nil {
-		t.Fatalf("rewrite trace missing; trace=%+v", got.Trace)
-	}
-	if step.FromShape != "simple" || step.ToShape != "simple" {
-		t.Fatalf("rewrite shapes = (%q, %q), want simple/simple; trace=%+v", step.FromShape, step.ToShape, got.Trace)
-	}
-	if step.FromSafe == nil || step.ToSafe == nil || !*step.FromSafe || !*step.ToSafe {
-		t.Fatalf("rewrite safety = (%v, %v), want true/true; trace=%+v", step.FromSafe, step.ToSafe, got.Trace)
+
+	for _, command := range commands {
+		t.Run(command, func(t *testing.T) {
+			got, err := Evaluate(p, command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != "allow" {
+				t.Fatalf("Outcome = %q, want allow; decision=%+v", got.Outcome, got)
+			}
+			if got.Command != command {
+				t.Fatalf("Command = %q, want original %q", got.Command, command)
+			}
+		})
 	}
 }
 
-func TestRewriteInvariantDetectsSafeToUnsafeAndSimpleToCompound(t *testing.T) {
-	before := commandpkg.Parse("git status")
-	after := commandpkg.Parse("git status && echo $(rm -rf /tmp/x)")
-	reasons := rewriteInvariantViolationReasons(
-		before,
-		commandpkg.EvaluationSafetyForPlan(before),
-		after,
-		commandpkg.EvaluationSafetyForPlan(after),
-	)
+func TestEvaluateShellDashCNonDashCPassThrough(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{
+				Command: PermissionCommandSpec{Name: "git", Semantic: &SemanticMatchSpec{Verb: "status"}},
+			}},
+		},
+	}, Source{})
 
-	if !slices.Contains(reasons, "rewrite_simple_to_compound") {
-		t.Fatalf("reasons=%#v, want rewrite_simple_to_compound", reasons)
+	for _, command := range []string{"bash script.sh", "sh script.sh", "env bash script.sh"} {
+		t.Run(command, func(t *testing.T) {
+			got, err := Evaluate(p, command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome == "allow" {
+				t.Fatalf("Outcome = allow, want not allow; decision=%+v", got)
+			}
+		})
 	}
-	if !slices.Contains(reasons, "rewrite_safe_to_unsafe") {
-		t.Fatalf("reasons=%#v, want rewrite_safe_to_unsafe", reasons)
+}
+
+func TestEvaluateShellDashCCompoundDenyWins(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Deny: []PermissionRuleSpec{{
+				Patterns: []string{`^rm\s+`},
+			}},
+			Allow: []PermissionRuleSpec{{
+				Command: PermissionCommandSpec{Name: "git", Semantic: &SemanticMatchSpec{Verb: "status"}},
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "bash -c 'git status && rm -rf /tmp/x'")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "deny" {
+		t.Fatalf("Outcome = %q, want deny; decision=%+v", got.Outcome, got)
+	}
+}
+
+func TestEvaluateShellDashCParseErrorFailsClosed(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{
+				Patterns: []string{`^echo\s+`},
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "bash -c 'echo $('")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome == "allow" {
+		t.Fatalf("Outcome = allow, want fail closed; decision=%+v", got)
+	}
+}
+
+func TestEvaluateAbsolutePathCommandNameMatchesSemanticRule(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{
+				Command: PermissionCommandSpec{Name: "git", Semantic: &SemanticMatchSpec{Verb: "status"}},
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "/usr/bin/git status")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if got.Outcome != "allow" {
+		t.Fatalf("Outcome = %q, want allow; decision=%+v", got.Outcome, got)
+	}
+	found := false
+	for _, step := range got.Trace {
+		if step.ProgramToken == "/usr/bin/git" && step.NormalizedCommand == "git" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("trace missing normalization: %+v", got.Trace)
+	}
+}
+
+func TestEvaluateAWSProfileSemanticParsingForms(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{
+				Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts", Operation: "get-caller-identity", Profile: "myprof"}},
+			}},
+		},
+	}, Source{})
+
+	for _, command := range []string{
+		"aws --profile myprof sts get-caller-identity",
+		"aws --profile=myprof sts get-caller-identity",
+		"AWS_PROFILE=myprof aws sts get-caller-identity",
+	} {
+		t.Run(command, func(t *testing.T) {
+			got, err := Evaluate(p, command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != "allow" {
+				t.Fatalf("Outcome = %q, want allow; decision=%+v", got.Outcome, got)
+			}
+			if got.Command != command {
+				t.Fatalf("Command = %q, want original %q", got.Command, command)
+			}
+		})
+	}
+}
+
+func TestEvaluateReadOnlyCommandsUsePatterns(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{
+				Patterns: []string{`^ls(\s|$)`, `^pwd$`},
+			}},
+		},
+	}, Source{})
+
+	for _, command := range []string{"ls -la", "pwd"} {
+		t.Run(command, func(t *testing.T) {
+			got, err := Evaluate(p, command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != "allow" {
+				t.Fatalf("Outcome = %q, want allow; decision=%+v", got.Outcome, got)
+			}
+		})
+	}
+}
+
+func TestValidatePipelineRejectsTopLevelRewrite(t *testing.T) {
+	issues := ValidatePipeline(PipelineSpec{
+		Rewrite: []map[string]any{{
+			"match": map[string]any{
+				"command_is_absolute_path": true,
+			},
+			"strip_command_path": true,
+		}},
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{Patterns: []string{`^pwd$`}}},
+		},
+	})
+	if len(issues) == 0 {
+		t.Fatal("ValidatePipeline issues empty, want rewrite rejection")
+	}
+	if !strings.Contains(issues[0], "top-level rewrite is no longer supported") {
+		t.Fatalf("issues = %#v, want rewrite unsupported error", issues)
+	}
+}
+
+func TestEvaluateTraceIncludesCommandPlanNormalization(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{Command: PermissionCommandSpec{Name: "git", Semantic: &SemanticMatchSpec{Verb: "status"}}}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "/usr/bin/git status")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	step := firstTraceStepByName(got.Trace, "normalized_command")
+	if step == nil {
+		t.Fatalf("normalization trace missing; trace=%+v", got.Trace)
+	}
+	if step.ProgramToken != "/usr/bin/git" || step.NormalizedCommand != "git" || step.NormalizedReason != "basename" {
+		t.Fatalf("normalization trace = %+v, want basename git", step)
 	}
 }
 
@@ -231,12 +375,8 @@ func TestGenericParserSemanticGuardPreventsDenyToAllowRegression(t *testing.T) {
 
 func TestValidatePipelineRequiresE2ETest(t *testing.T) {
 	issues := ValidatePipeline(PipelineSpec{
-		Rewrite: []RewriteStepSpec{{
-			UnwrapShellDashC: true,
-			Test: RewriteTestSpec{
-				{In: "bash -c 'git status'", Out: "git status"},
-				{Pass: "bash script.sh"},
-			},
+		Rewrite: []map[string]any{{
+			"unwrap_shell_dash_c": true,
 		}},
 	})
 	if len(issues) == 0 {
@@ -257,22 +397,6 @@ func TestValidatePipelineRejectsUnknownClaudePermissionMergeMode(t *testing.T) {
 	})
 	if len(issues) == 0 {
 		t.Fatal("expected validation issues")
-	}
-}
-
-func TestRewriteStepName(t *testing.T) {
-	if got := RewriteStepName(RewriteStepSpec{StripCommandPath: true}); got != "strip_command_path" {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestRewriteStepMatchesPattern(t *testing.T) {
-	step := RewriteStepSpec{Pattern: `^\s*git\s+diff\s+.*\.\.\.`}
-	if !RewriteStepMatches(step, "git diff main...HEAD") {
-		t.Fatal("expected pattern match")
-	}
-	if RewriteStepMatches(step, "git diff HEAD~1") {
-		t.Fatal("did not expect match")
 	}
 }
 
@@ -2158,12 +2282,14 @@ func TestValidateSemanticMatchRules(t *testing.T) {
 			issue: "permission.deny[0].command.semantic contains fields not supported for command: helmfile",
 		},
 		{
-			name: "rewrite semantic",
-			spec: PipelineSpec{Rewrite: []RewriteStepSpec{{
-				Match:            MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api"}},
-				StripCommandPath: true,
+			name: "top level rewrite",
+			spec: PipelineSpec{Rewrite: []map[string]any{{
+				"match": map[string]any{
+					"command": "gh",
+				},
+				"strip_command_path": true,
 			}}},
-			issue: "rewrite[0].match.semantic is not supported; semantic match is currently permission-only",
+			issue: "top-level rewrite is no longer supported; cc-bash-proxy no longer rewrites commands. Use permission.command / env / patterns, and rely on parser-backed normalization for evaluation.",
 		},
 	}
 	for _, tt := range tests {

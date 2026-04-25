@@ -10,32 +10,6 @@ import (
 	configrepo "github.com/tasuku43/cc-bash-proxy/internal/infra/config"
 )
 
-func TestRunWarnsOnRelaxedRewriteContracts(t *testing.T) {
-	strict := false
-	loaded := configrepo.Loaded{
-		Pipeline: policy.NewPipeline(policy.PipelineSpec{
-			Rewrite: []policy.RewriteStepSpec{{
-				Match: policy.MatchSpec{Command: "kubectl"},
-				MoveFlagToEnv: policy.MoveFlagToEnvSpec{
-					Flag: "--kubeconfig",
-					Env:  "KUBECONFIG",
-				},
-				Strict: &strict,
-				Test: policy.RewriteTestSpec{
-					{In: "kubectl --kubeconfig /tmp/dev get pods", Out: "KUBECONFIG=/tmp/dev kubectl get pods"},
-					{Pass: "KUBECONFIG=/tmp/dev kubectl get pods"},
-				},
-			}},
-			Test: policy.PipelineTestSpec{{In: "kubectl --kubeconfig /tmp/dev get pods", Decision: "ask"}},
-		}, policy.Source{}),
-	}
-
-	report := Run(loaded, "claude", t.TempDir(), t.TempDir())
-	if !hasCheck(report, "rewrite.relaxed-contracts", StatusWarn) {
-		t.Fatalf("checks = %+v", report.Checks)
-	}
-}
-
 func TestRunPassesWhenPipelineTestsMatch(t *testing.T) {
 	loaded := configrepo.Loaded{
 		Pipeline: policy.NewPipeline(policy.PipelineSpec{

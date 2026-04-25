@@ -239,11 +239,10 @@ func TestSecurityRegressionMatrixParserBoundaries(t *testing.T) {
 	}
 }
 
-func TestSecurityRegressionMatrixRewriteBoundaries(t *testing.T) {
+func TestSecurityRegressionMatrixEvaluationNormalizationBoundaries(t *testing.T) {
 	tests := []struct {
 		name       string
 		command    string
-		rewrite    []RewriteStepSpec
 		permission PermissionSpec
 		want       string
 		wantCmd    string
@@ -251,66 +250,57 @@ func TestSecurityRegressionMatrixRewriteBoundaries(t *testing.T) {
 		trace      []securityTraceWant
 	}{
 		{
-			name:    "unwrap shell dash c preserves allow boundary",
+			name:    "shell dash c evaluates inner command without rewriting",
 			command: "bash -c 'git status'",
-			rewrite: []RewriteStepSpec{{UnwrapShellDashC: true}},
 			permission: PermissionSpec{Allow: []PermissionRuleSpec{{
 				Command: PermissionCommandSpec{Name: "git", Semantic: &SemanticMatchSpec{Verb: "status"}},
 			}}},
 			want:    "allow",
-			wantCmd: "git status",
+			wantCmd: "bash -c 'git status'",
 			shape:   commandpkg.ShellShapeSimple,
-			trace:   []securityTraceWant{{name: "unwrap_shell_dash_c"}, {effect: "allow"}},
+			trace:   []securityTraceWant{{name: "normalized_command"}, {effect: "allow"}},
 		},
 		{
-			name:    "move flag to env evaluates only rewritten command",
+			name:    "aws profile flag is semantic and raw deny still sees original command",
 			command: "aws --profile dev sts get-caller-identity",
-			rewrite: []RewriteStepSpec{{MoveFlagToEnv: MoveFlagToEnvSpec{Flag: "--profile", Env: "AWS_PROFILE"}}},
 			permission: PermissionSpec{
 				Deny: []PermissionRuleSpec{{Patterns: []string{`^\s*aws\s+--profile\s+dev\s+`}}},
 				Allow: []PermissionRuleSpec{{
-					Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts"}},
-					Env:     PermissionEnvSpec{Requires: []string{"AWS_PROFILE"}},
+					Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts", Profile: "dev"}},
 				}},
 			},
-			want:    "allow",
-			wantCmd: "AWS_PROFILE=dev aws sts get-caller-identity",
+			want:    "deny",
+			wantCmd: "aws --profile dev sts get-caller-identity",
 			shape:   commandpkg.ShellShapeSimple,
-			trace:   []securityTraceWant{{name: "move_flag_to_env"}, {effect: "allow"}},
+			trace:   []securityTraceWant{{effect: "deny"}},
 		},
 		{
-			name:    "continue chain unwraps then moves flag",
+			name:    "wrapper plus aws profile flag is semantic but not env rewrite",
 			command: "env aws --profile dev sts get-caller-identity",
-			rewrite: []RewriteStepSpec{
-				{UnwrapWrapper: UnwrapWrapperSpec{Wrappers: []string{"env"}}, Continue: true},
-				{MoveFlagToEnv: MoveFlagToEnvSpec{Flag: "--profile", Env: "AWS_PROFILE"}},
-			},
 			permission: PermissionSpec{Allow: []PermissionRuleSpec{{
-				Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts"}},
-				Env:     PermissionEnvSpec{Requires: []string{"AWS_PROFILE"}},
+				Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts", Profile: "dev"}},
 			}}},
 			want:    "allow",
-			wantCmd: "AWS_PROFILE=dev aws sts get-caller-identity",
+			wantCmd: "env aws --profile dev sts get-caller-identity",
 			shape:   commandpkg.ShellShapeSimple,
-			trace:   []securityTraceWant{{name: "unwrap_wrapper"}, {name: "move_flag_to_env"}, {effect: "allow"}},
+			trace:   []securityTraceWant{{effect: "allow"}},
 		},
 		{
-			name:    "unsafe unwrap payload remains ask",
+			name:    "unsafe shell dash c payload remains ask",
 			command: "bash -c 'git status && rm -rf /tmp/x'",
-			rewrite: []RewriteStepSpec{{UnwrapShellDashC: true}},
 			permission: PermissionSpec{Allow: []PermissionRuleSpec{{
 				Command: PermissionCommandSpec{Name: "git", Semantic: &SemanticMatchSpec{Verb: "status"}},
 			}}},
 			want:    "ask",
 			wantCmd: "bash -c 'git status && rm -rf /tmp/x'",
-			shape:   commandpkg.ShellShapeSimple,
+			shape:   commandpkg.ShellShapeCompound,
 			trace:   []securityTraceWant{{effect: "ask"}},
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run("rewrite/"+tt.name, func(t *testing.T) {
-			p := NewPipeline(PipelineSpec{Rewrite: tt.rewrite, Permission: tt.permission}, Source{})
+		t.Run("evaluation/"+tt.name, func(t *testing.T) {
+			p := NewPipeline(PipelineSpec{Permission: tt.permission}, Source{})
 			got, err := Evaluate(p, tt.command)
 			if err != nil {
 				t.Fatalf("Evaluate() error = %v", err)
@@ -319,11 +309,6 @@ func TestSecurityRegressionMatrixRewriteBoundaries(t *testing.T) {
 				t.Fatalf("Command = %q, want %q; decision=%+v", got.Command, tt.wantCmd, got)
 			}
 			assertSecurityDecision(t, got, tt.want, tt.shape, nil, tt.trace)
-			for _, step := range got.Trace {
-				if step.Action == "rewrite" && (step.FromShape == "" || step.ToShape == "" || step.FromSafe == nil || step.ToSafe == nil) {
-					t.Fatalf("rewrite trace missing shape/safety: %+v trace=%+v", step, got.Trace)
-				}
-			}
 		})
 	}
 }

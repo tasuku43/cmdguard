@@ -17,18 +17,7 @@ func TestLoadEffectiveUsesUserConfig(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := `rewrite:
-  - match:
-      command: aws
-      args_contains: ["--profile"]
-    move_flag_to_env:
-      flag: "--profile"
-      env: "AWS_PROFILE"
-    test:
-      - in: "aws --profile dev sts get-caller-identity"
-        out: "AWS_PROFILE=dev aws sts get-caller-identity"
-      - pass: "AWS_PROFILE=dev aws sts get-caller-identity"
-permission:
+	body := `permission:
   allow:
     - command:
 
@@ -37,18 +26,14 @@ permission:
         semantic:
 
           service: sts
-
-      env:
-
-        requires: ["AWS_PROFILE"]
+          profile: dev
       test:
         allow:
-          - "AWS_PROFILE=dev aws sts get-caller-identity"
+          - "aws --profile dev sts get-caller-identity"
         pass:
-          - "AWS_PROFILE=dev aws s3 ls"
+          - "aws --profile dev s3 ls"
 test:
   - in: "aws --profile dev sts get-caller-identity"
-    rewritten: "AWS_PROFILE=dev aws sts get-caller-identity"
     decision: allow
 `
 	if err := os.WriteFile(userPath, []byte(body), 0o644); err != nil {
@@ -59,7 +44,7 @@ test:
 	if len(loaded.Errors) != 0 {
 		t.Fatalf("unexpected errors: %v", loaded.Errors)
 	}
-	if len(loaded.Pipeline.Rewrite) != 1 || len(loaded.Pipeline.Permission.Allow) != 1 {
+	if len(loaded.Pipeline.Rewrite) != 0 || len(loaded.Pipeline.Permission.Allow) != 1 {
 		t.Fatalf("pipeline = %#v", loaded.Pipeline)
 	}
 }
@@ -75,16 +60,7 @@ func TestLoadEffectiveForToolMergesUserAndProjectConfig(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(userPath, []byte(`rewrite:
-  - match:
-      command: aws
-    move_flag_to_env:
-      flag: "--profile"
-      env: "AWS_PROFILE"
-    test:
-      - in: "aws --profile dev sts get-caller-identity"
-        out: "AWS_PROFILE=dev aws sts get-caller-identity"
-permission:
+	if err := os.WriteFile(userPath, []byte(`permission:
   allow:
     - command:
 
@@ -93,18 +69,14 @@ permission:
         semantic:
 
           service: sts
-
-      env:
-
-        requires: ["AWS_PROFILE"]
+          profile: dev
       test:
         allow:
-          - "AWS_PROFILE=dev aws sts get-caller-identity"
+          - "aws --profile dev sts get-caller-identity"
         pass:
-          - "AWS_PROFILE=dev aws s3 ls"
+          - "aws --profile dev s3 ls"
 test:
   - in: "aws --profile dev sts get-caller-identity"
-    rewritten: "AWS_PROFILE=dev aws sts get-caller-identity"
     decision: allow
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -136,7 +108,7 @@ test:
 	if len(loaded.Errors) != 0 {
 		t.Fatalf("unexpected errors: %v", loaded.Errors)
 	}
-	if len(loaded.Pipeline.Rewrite) != 1 {
+	if len(loaded.Pipeline.Rewrite) != 0 {
 		t.Fatalf("rewrite = %#v", loaded.Pipeline.Rewrite)
 	}
 	if len(loaded.Pipeline.Permission.Allow) != 1 || len(loaded.Pipeline.Permission.Deny) != 1 {
@@ -341,30 +313,21 @@ test:
 	}
 }
 
-func TestLoadFileForEvalIfPresentSupportsStripCommandPath(t *testing.T) {
+func TestLoadFileForEvalIfPresentSupportsAbsolutePathNormalization(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cc-bash-proxy.yml")
 	cacheDir := t.TempDir()
-	body := `rewrite:
-  - match:
-      command_is_absolute_path: true
-    strip_command_path: true
-    test:
-      - in: "/bin/ls -R foo"
-        out: "ls -R foo"
-      - pass: "ls -R foo"
-permission:
+	body := `permission:
   allow:
     - command:
         name: ls
       test:
         allow:
-          - "ls -R foo"
+          - "/bin/ls -R foo"
         pass:
           - "pwd"
 test:
   - in: "/bin/ls -R foo"
-    rewritten: "ls -R foo"
     decision: allow
 `
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -379,7 +342,7 @@ test:
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
-	if decision.Outcome != "allow" || decision.Command != "ls -R foo" {
+	if decision.Outcome != "allow" || decision.Command != "/bin/ls -R foo" {
 		t.Fatalf("decision = %+v", decision)
 	}
 }
@@ -1006,7 +969,7 @@ test:
 	}
 
 	_, err := LoadFileIfPresent(Source{Layer: LayerUser, Path: path})
-	if err == nil || !strings.Contains(err.Error(), "AWS_PROFILE") {
+	if err == nil || !strings.Contains(err.Error(), "top-level rewrite is no longer supported") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

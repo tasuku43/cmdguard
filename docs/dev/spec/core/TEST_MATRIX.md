@@ -111,11 +111,12 @@ and `deny` are honored when `cc-bash-proxy` abstains, while both sides
 abstaining falls back to final `ask`. E2E hook tests must assert trace
 distinguishes `no_match` from final fallback `default` ask.
 
-### Rewrite
+### Evaluation Normalization
 
-- shell unwrap
-- environment or flag movement
-- rewrite chains
+- shell `-c` built-in evaluation
+- absolute command path basename matching
+- AWS profile semantic parsing
 
-The matrix must assert both the final rewritten command and the final decision.
-Successful rewrite trace entries must include before/after shape and safety.
+The matrix must assert the original command remains unchanged and the final
+permission decision is correct. Trace entries must distinguish original tokens
+from normalized command names where normalization is used for evaluation.

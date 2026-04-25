@@ -105,5 +105,5 @@ The important distinction is:
 ## 6. Integration Note
 
 The central design goal is that `cc-bash-proxy` itself becomes the primary
-permission authority for shell commands, after the rewrite pipeline has already
-produced the canonical command shape.
+permission authority for shell commands without changing the command string
+that will be executed.

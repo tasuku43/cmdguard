@@ -8,31 +8,15 @@ import (
 	"strings"
 
 	commandpkg "github.com/tasuku43/cc-bash-proxy/internal/domain/command"
-	"github.com/tasuku43/cc-bash-proxy/internal/domain/directive"
 	"github.com/tasuku43/cc-bash-proxy/internal/domain/invocation"
 	semanticpkg "github.com/tasuku43/cc-bash-proxy/internal/domain/semantic"
 )
 
 type PipelineSpec struct {
-	ClaudePermissionMergeMode string            `yaml:"claude_permission_merge_mode" json:"claude_permission_merge_mode,omitempty"`
-	Rewrite                   []RewriteStepSpec `yaml:"rewrite" json:"rewrite,omitempty"`
-	Permission                PermissionSpec    `yaml:"permission" json:"permission,omitempty"`
-	Test                      PipelineTestSpec  `yaml:"test" json:"test,omitempty"`
-}
-
-type RewriteStepSpec struct {
-	Match            MatchSpec         `yaml:"match" json:"match,omitempty"`
-	Pattern          string            `yaml:"pattern" json:"pattern,omitempty"`
-	Patterns         []string          `yaml:"patterns" json:"patterns,omitempty"`
-	UnwrapShellDashC bool              `yaml:"unwrap_shell_dash_c" json:"unwrap_shell_dash_c,omitempty"`
-	UnwrapWrapper    UnwrapWrapperSpec `yaml:"unwrap_wrapper" json:"unwrap_wrapper,omitempty"`
-	MoveFlagToEnv    MoveFlagToEnvSpec `yaml:"move_flag_to_env" json:"move_flag_to_env,omitempty"`
-	MoveEnvToFlag    MoveEnvToFlagSpec `yaml:"move_env_to_flag" json:"move_env_to_flag,omitempty"`
-	StripCommandPath bool              `yaml:"strip_command_path" json:"strip_command_path,omitempty"`
-	Strict           *bool             `yaml:"strict" json:"strict,omitempty"`
-	Continue         bool              `yaml:"continue" json:"continue,omitempty"`
-	Test             RewriteTestSpec   `yaml:"test" json:"test,omitempty"`
-	Source           Source            `yaml:"-" json:"source,omitempty"`
+	ClaudePermissionMergeMode string           `yaml:"claude_permission_merge_mode" json:"claude_permission_merge_mode,omitempty"`
+	Rewrite                   []map[string]any `yaml:"rewrite" json:"rewrite,omitempty"`
+	Permission                PermissionSpec   `yaml:"permission" json:"permission,omitempty"`
+	Test                      PipelineTestSpec `yaml:"test" json:"test,omitempty"`
 }
 
 type PermissionSpec struct {
@@ -74,28 +58,6 @@ type PipelineExpectCase struct {
 	In        string `yaml:"in" json:"in,omitempty"`
 	Rewritten string `yaml:"rewritten" json:"rewritten,omitempty"`
 	Decision  string `yaml:"decision" json:"decision,omitempty"`
-}
-
-type MoveFlagToEnvSpec struct {
-	Flag string `yaml:"flag" json:"flag,omitempty"`
-	Env  string `yaml:"env" json:"env,omitempty"`
-}
-
-type MoveEnvToFlagSpec struct {
-	Env  string `yaml:"env" json:"env,omitempty"`
-	Flag string `yaml:"flag" json:"flag,omitempty"`
-}
-
-type UnwrapWrapperSpec struct {
-	Wrappers []string `yaml:"wrappers" json:"wrappers,omitempty"`
-}
-
-type RewriteTestSpec []RewriteTestCase
-
-type RewriteTestCase struct {
-	In   string `yaml:"in" json:"in,omitempty"`
-	Out  string `yaml:"out" json:"out,omitempty"`
-	Pass string `yaml:"pass" json:"pass,omitempty"`
 }
 
 type MatchSpec struct {
@@ -295,6 +257,9 @@ type TraceStep struct {
 	ToShapeFlags        []string `json:"to_shape_flags,omitempty"`
 	ToSafe              *bool    `json:"to_safe,omitempty"`
 	Program             string   `json:"program,omitempty"`
+	ProgramToken        string   `json:"program_token,omitempty"`
+	NormalizedCommand   string   `json:"normalized_command,omitempty"`
+	NormalizedReason    string   `json:"normalized_reason,omitempty"`
 	ActionPath          []string `json:"action_path,omitempty"`
 	Shape               string   `json:"shape,omitempty"`
 	ShapeFlags          []string `json:"shape_flags,omitempty"`
@@ -309,16 +274,10 @@ const (
 )
 
 type preparedPipeline struct {
-	Ready   bool
-	Rewrite []preparedRewriteStep
-	Deny    []preparedPermissionRule
-	Ask     []preparedPermissionRule
-	Allow   []preparedPermissionRule
-}
-
-type preparedRewriteStep struct {
-	Spec     RewriteStepSpec
-	Selector preparedSelector
+	Ready bool
+	Deny  []preparedPermissionRule
+	Ask   []preparedPermissionRule
+	Allow []preparedPermissionRule
 }
 
 type preparedPermissionRule struct {
@@ -347,11 +306,6 @@ func NewPipeline(spec PipelineSpec, src Source) Pipeline {
 }
 
 func stampSources(spec PipelineSpec, src Source) PipelineSpec {
-	for i := range spec.Rewrite {
-		if spec.Rewrite[i].Source == (Source{}) {
-			spec.Rewrite[i].Source = src
-		}
-	}
 	for i := range spec.Permission.Deny {
 		if spec.Permission.Deny[i].Source == (Source{}) {
 			spec.Permission.Deny[i].Source = src
@@ -372,13 +326,6 @@ func stampSources(spec PipelineSpec, src Source) PipelineSpec {
 
 func preparePipeline(spec PipelineSpec) preparedPipeline {
 	prepared := preparedPipeline{Ready: true}
-	prepared.Rewrite = make([]preparedRewriteStep, 0, len(spec.Rewrite))
-	for _, step := range spec.Rewrite {
-		prepared.Rewrite = append(prepared.Rewrite, preparedRewriteStep{
-			Spec:     step,
-			Selector: prepareSelector(step.Match, step.Pattern, step.Patterns),
-		})
-	}
 	prepared.Deny = preparePermissionRules(spec.Permission.Deny)
 	prepared.Ask = preparePermissionRules(spec.Permission.Ask)
 	prepared.Allow = preparePermissionRules(spec.Permission.Allow)
@@ -445,117 +392,83 @@ func sourcePtr(src Source) *Source {
 }
 
 func Evaluate(p Pipeline, command string) (Decision, error) {
-	current := command
 	trace := []TraceStep{}
-	rewriteSafetyReasons := []string{}
 	prepared := p.prepared
 	if !prepared.Ready {
 		prepared = preparePipeline(stampSources(p.PipelineSpec, p.Source))
 	}
 
-	for _, step := range prepared.Rewrite {
-		if !step.Selector.matches(current) {
-			continue
-		}
-		beforePlan := commandpkg.Parse(current)
-		beforeSafety := commandpkg.EvaluationSafetyForPlan(beforePlan)
-		rewritten, ok := applyRewriteStep(step.Spec, current)
-		if !ok {
-			continue
-		}
-		afterPlan := commandpkg.Parse(rewritten)
-		afterSafety := commandpkg.EvaluationSafetyForPlan(afterPlan)
-		invariantReasons := rewriteInvariantViolationReasons(beforePlan, beforeSafety, afterPlan, afterSafety)
-		effect := ""
-		if len(invariantReasons) > 0 {
-			effect = "fail_closed"
-			rewriteSafetyReasons = append(rewriteSafetyReasons, invariantReasons...)
-		}
-		trace = append(trace, TraceStep{
-			Action:         "rewrite",
-			Name:           rewritePrimitiveName(step.Spec),
-			Effect:         effect,
-			From:           current,
-			To:             rewritten,
-			Reason:         strings.Join(invariantReasons, ","),
-			Relaxed:        !RewriteStrict(step.Spec),
-			Continue:       step.Spec.Continue,
-			Source:         sourcePtr(step.Spec.Source),
-			FromShape:      string(beforePlan.Shape.Kind),
-			FromShapeFlags: beforePlan.Shape.Flags(),
-			FromSafe:       boolPtr(beforeSafety.Safe),
-			ToShape:        string(afterPlan.Shape.Kind),
-			ToShapeFlags:   afterPlan.Shape.Flags(),
-			ToSafe:         boolPtr(afterSafety.Safe),
-		})
-		current = rewritten
-		if len(invariantReasons) > 0 {
-			break
-		}
-		if !step.Spec.Continue {
-			break
-		}
-	}
-
-	plan := commandpkg.Parse(current)
+	plan := commandpkg.Parse(command)
+	trace = append(trace, commandPlanTraceSteps(plan)...)
 	safety := commandpkg.EvaluationSafetyForPlan(plan)
-	if len(rewriteSafetyReasons) > 0 {
-		safety.Safe = false
-		safety.Reasons = dedupeStrings(append(safety.Reasons, rewriteSafetyReasons...))
-	}
 	if !safety.Safe {
 		trace = append(trace, unsafeCommandTraceStep(plan, safety))
 	}
 
-	if rule, ok := firstPreparedPatternPermissionMatch(prepared.Deny, current); ok {
+	if rule, ok := firstPreparedPatternPermissionMatch(prepared.Deny, command); ok {
 		trace = append(trace, permissionTraceStep("deny", permissionRuleTypeRaw, rule))
-		return Decision{Outcome: "deny", Explicit: true, Reason: "rule_match", Command: current, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
+		return Decision{Outcome: "deny", Explicit: true, Reason: "rule_match", Command: command, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
 	}
-	if rule, cmd, ok := firstPreparedStructuredPermissionMatch(prepared.Deny, current); ok {
+	if rule, cmd, ok := firstPreparedStructuredPermissionMatch(prepared.Deny, command); ok {
 		trace = append(trace, permissionTraceStepForCommand("deny", permissionRuleTypeStructured, rule, cmd))
-		return Decision{Outcome: "deny", Explicit: true, Reason: "rule_match", Command: current, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
+		return Decision{Outcome: "deny", Explicit: true, Reason: "rule_match", Command: command, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
 	}
 	if !safety.Safe {
 		if decision, ok := evaluateCommandPlanComposition(prepared.Deny, prepared.Ask, prepared.Allow, plan, false, false); ok {
 			trace = append(trace, decision.Trace...)
-			return Decision{Outcome: decision.Outcome, Explicit: true, Reason: "composition", Command: current, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
+			return Decision{Outcome: decision.Outcome, Explicit: true, Reason: "composition", Command: command, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
 		}
 	}
-	if rule, ok := firstPreparedPatternPermissionMatch(prepared.Ask, current); ok {
+	if rule, ok := firstPreparedPatternPermissionMatch(prepared.Ask, command); ok {
 		trace = append(trace, permissionTraceStep("ask", permissionRuleTypeRaw, rule))
-		return Decision{Outcome: "ask", Explicit: true, Reason: "rule_match", Command: current, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
+		return Decision{Outcome: "ask", Explicit: true, Reason: "rule_match", Command: command, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
 	}
-	if rule, cmd, ok := firstPreparedStructuredPermissionMatch(prepared.Ask, current); ok {
+	if rule, cmd, ok := firstPreparedStructuredPermissionMatch(prepared.Ask, command); ok {
 		trace = append(trace, permissionTraceStepForCommand("ask", permissionRuleTypeStructured, rule, cmd))
-		return Decision{Outcome: "ask", Explicit: true, Reason: "rule_match", Command: current, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
+		return Decision{Outcome: "ask", Explicit: true, Reason: "rule_match", Command: command, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
 	}
 	if !safety.Safe {
 		if decision, ok := evaluateCommandPlanComposition(prepared.Deny, prepared.Ask, prepared.Allow, plan, true, false); ok {
 			trace = append(trace, decision.Trace...)
-			return Decision{Outcome: decision.Outcome, Explicit: true, Reason: "composition", Command: current, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
+			return Decision{Outcome: decision.Outcome, Explicit: true, Reason: "composition", Command: command, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
 		}
 		trace = append(trace, TraceStep{Action: "permission", Effect: "ask", Name: "fail_closed", Reason: strings.Join(safety.Reasons, ",")})
-		return Decision{Outcome: "ask", Explicit: true, Reason: "fail_closed", Command: current, OriginalCommand: command, Trace: trace}, nil
+		return Decision{Outcome: "ask", Explicit: true, Reason: "fail_closed", Command: command, OriginalCommand: command, Trace: trace}, nil
 	}
-	if rule, cmd, ok := firstPreparedStructuredAllowPermissionMatch(prepared.Allow, current); ok {
+	if rule, cmd, ok := firstPreparedStructuredAllowPermissionMatch(prepared.Allow, command); ok {
 		trace = append(trace, permissionTraceStepForCommand("allow", permissionRuleTypeStructured, rule, cmd))
-		return Decision{Outcome: "allow", Explicit: true, Reason: "rule_match", Command: current, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
+		return Decision{Outcome: "allow", Explicit: true, Reason: "rule_match", Command: command, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
 	}
 	if decision, ok := evaluateCommandPlanComposition(prepared.Deny, prepared.Ask, prepared.Allow, plan, false, true); ok {
 		trace = append(trace, decision.Trace...)
-		return Decision{Outcome: decision.Outcome, Explicit: true, Reason: "composition", Command: current, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
+		return Decision{Outcome: decision.Outcome, Explicit: true, Reason: "composition", Command: command, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
 	}
-	if rule, ok := firstPreparedPatternAllowPermissionMatch(prepared.Allow, current); ok {
+	if rule, ok := firstPreparedPatternAllowPermissionMatch(prepared.Allow, command); ok {
 		trace = append(trace, permissionTraceStep("allow", permissionRuleTypeRaw, rule))
-		return Decision{Outcome: "allow", Explicit: true, Reason: "rule_match", Command: current, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
+		return Decision{Outcome: "allow", Explicit: true, Reason: "rule_match", Command: command, OriginalCommand: command, Message: rule.Message, Trace: trace}, nil
 	}
 	if decision, ok := evaluateCommandPlanComposition(prepared.Deny, prepared.Ask, prepared.Allow, plan, true, true); ok {
 		trace = append(trace, decision.Trace...)
-		return Decision{Outcome: decision.Outcome, Explicit: true, Reason: "composition", Command: current, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
+		return Decision{Outcome: decision.Outcome, Explicit: true, Reason: "composition", Command: command, OriginalCommand: command, Message: decision.Message, Trace: trace}, nil
 	}
 
 	trace = append(trace, TraceStep{Action: "permission", Effect: "abstain", Name: "no_match", Reason: "no permission rule matched"})
-	return Decision{Outcome: "abstain", Reason: "no_match", Command: current, OriginalCommand: command, Trace: trace}, nil
+	return Decision{Outcome: "abstain", Reason: "no_match", Command: command, OriginalCommand: command, Trace: trace}, nil
+}
+
+func commandPlanTraceSteps(plan commandpkg.CommandPlan) []TraceStep {
+	steps := make([]TraceStep, 0, len(plan.Normalized))
+	for _, normalized := range plan.Normalized {
+		steps = append(steps, TraceStep{
+			Action:            "evaluate",
+			Name:              "normalized_command",
+			Command:           normalized.Raw,
+			ProgramToken:      normalized.OriginalToken,
+			NormalizedCommand: normalized.CommandName,
+			NormalizedReason:  normalized.Reason,
+		})
+	}
+	return steps
 }
 
 func boolPtr(v bool) *bool {
@@ -843,8 +756,14 @@ func unsafeCompositionReason(shape commandpkg.ShellShape) string {
 }
 
 func evaluatePreparedCommand(deny []preparedPermissionRule, ask []preparedPermissionRule, allow []preparedPermissionRule, cmd commandpkg.Command) commandDecision {
+	if rule, ok := firstPreparedCommandPatternMatch(deny, cmd); ok {
+		return commandDecision{Outcome: "deny", Rule: rule, Matched: true, RuleType: permissionRuleTypeRaw, Command: cmd}
+	}
 	if rule, ok := firstPreparedCommandMatch(deny, cmd); ok {
 		return commandDecision{Outcome: "deny", Rule: rule, Matched: true, RuleType: permissionRuleTypeStructured, Command: cmd}
+	}
+	if rule, ok := firstPreparedCommandPatternMatch(ask, cmd); ok {
+		return commandDecision{Outcome: "ask", Rule: rule, Matched: true, RuleType: permissionRuleTypeRaw, Command: cmd}
 	}
 	if rule, ok := firstPreparedCommandMatch(ask, cmd); ok {
 		return commandDecision{Outcome: "ask", Rule: rule, Matched: true, RuleType: permissionRuleTypeStructured, Command: cmd}
@@ -854,6 +773,9 @@ func evaluatePreparedCommand(deny []preparedPermissionRule, ask []preparedPermis
 	}
 	if rule, ok := firstPreparedCommandAllowMatch(allow, cmd); ok {
 		return commandDecision{Outcome: "allow", Rule: rule, Matched: true, RuleType: permissionRuleTypeStructured, Command: cmd}
+	}
+	if rule, ok := firstPreparedCommandPatternAllowMatch(allow, cmd); ok {
+		return commandDecision{Outcome: "allow", Rule: rule, Matched: true, RuleType: permissionRuleTypeRaw, Command: cmd}
 	}
 	return commandDecision{Outcome: "ask", Command: cmd}
 }
@@ -1105,6 +1027,27 @@ func firstPreparedCommandAllowMatch(rules []preparedPermissionRule, cmd commandp
 	return PermissionRuleSpec{}, false
 }
 
+func firstPreparedCommandPatternMatch(rules []preparedPermissionRule, cmd commandpkg.Command) (PermissionRuleSpec, bool) {
+	for _, rule := range rules {
+		if rule.Selector.matchesCommandPatternsValue(cmd) {
+			return rule.Spec, true
+		}
+	}
+	return PermissionRuleSpec{}, false
+}
+
+func firstPreparedCommandPatternAllowMatch(rules []preparedPermissionRule, cmd commandpkg.Command) (PermissionRuleSpec, bool) {
+	for _, rule := range rules {
+		if !commandAllowRuleCanMatch(cmd) {
+			continue
+		}
+		if rule.Selector.matchesCommandPatternsValue(cmd) {
+			return rule.Spec, true
+		}
+	}
+	return PermissionRuleSpec{}, false
+}
+
 func hasUnresolvedSemanticGuard(rules []preparedPermissionRule, cmd commandpkg.Command) bool {
 	if cmd.SemanticParser != "" {
 		return false
@@ -1216,31 +1159,9 @@ func allowRuleCanMatch(rule PermissionRuleSpec, command string) bool {
 	return invocation.IsStructuredSafeForAllow(command)
 }
 
-func applyRewriteStep(step RewriteStepSpec, command string) (string, bool) {
-	if step.UnwrapShellDashC {
-		return directive.UnwrapShellDashC(command)
-	}
-	if !IsZeroUnwrapWrapperSpec(step.UnwrapWrapper) {
-		return directive.UnwrapWrapper(command, step.UnwrapWrapper.Wrappers)
-	}
-	if !IsZeroMoveFlagToEnvSpec(step.MoveFlagToEnv) {
-		return directive.MoveFlagToEnv(command, step.MoveFlagToEnv.Flag, step.MoveFlagToEnv.Env)
-	}
-	if !IsZeroMoveEnvToFlagSpec(step.MoveEnvToFlag) {
-		return directive.MoveEnvToFlag(command, step.MoveEnvToFlag.Env, step.MoveEnvToFlag.Flag)
-	}
-	if step.StripCommandPath {
-		return directive.StripCommandPath(command)
-	}
-	return "", false
-}
-
-func ApplyRewriteStepForTest(step RewriteStepSpec, command string) (string, bool) {
-	return applyRewriteStep(step, command)
-}
-
-func RewriteStepName(step RewriteStepSpec) string {
-	return rewritePrimitiveName(step)
+func commandAllowRuleCanMatch(cmd commandpkg.Command) bool {
+	plan := commandpkg.Parse(cmd.Raw)
+	return commandpkg.IsSafeForEvaluation(plan) && invocation.IsStructuredSafeForAllow(cmd.Raw)
 }
 
 func (m MatchSpec) MatchMatches(command string) bool {
@@ -1249,10 +1170,6 @@ func (m MatchSpec) MatchMatches(command string) bool {
 		return false
 	}
 	return m.matches(plan.Commands[0])
-}
-
-func RewriteStepMatches(step RewriteStepSpec, command string) bool {
-	return selectorMatches(command, step.Match, step.Pattern, step.Patterns)
 }
 
 func PermissionRuleMatches(rule PermissionRuleSpec, command string) bool {
@@ -1393,6 +1310,19 @@ func (s preparedPermissionSelector) matchesPatterns(command string) bool {
 	return s.matchesEnvOnly(command)
 }
 
+func (s preparedPermissionSelector) matchesCommandPatternsValue(cmd commandpkg.Command) bool {
+	if !s.HasPatterns {
+		return false
+	}
+	if !s.patternMatches(cmd.Raw) {
+		return false
+	}
+	if IsZeroPermissionEnvSpec(s.Env) {
+		return true
+	}
+	return permissionEnvMatches(s.Env, cmd)
+}
+
 func (s preparedPermissionSelector) patternMatches(command string) bool {
 	for _, re := range s.Patterns {
 		if re != nil && re.MatchString(command) {
@@ -1419,23 +1349,6 @@ func patternMatches(command string, pattern string) bool {
 		return false
 	}
 	return re.MatchString(command)
-}
-
-func rewritePrimitiveName(step RewriteStepSpec) string {
-	switch {
-	case step.UnwrapShellDashC:
-		return "unwrap_shell_dash_c"
-	case !IsZeroUnwrapWrapperSpec(step.UnwrapWrapper):
-		return "unwrap_wrapper"
-	case !IsZeroMoveFlagToEnvSpec(step.MoveFlagToEnv):
-		return "move_flag_to_env"
-	case !IsZeroMoveEnvToFlagSpec(step.MoveEnvToFlag):
-		return "move_env_to_flag"
-	case step.StripCommandPath:
-		return "strip_command_path"
-	default:
-		return "rewrite"
-	}
 }
 
 func (m MatchSpec) matches(cmd commandpkg.Command) bool {
@@ -2336,17 +2249,16 @@ func commandMatchArgs(cmd commandpkg.Command) []string {
 
 func ValidatePipeline(spec PipelineSpec) []string {
 	var issues []string
-	if len(spec.Rewrite) == 0 && IsZeroPermissionSpec(spec.Permission) {
-		issues = append(issues, "must set at least one rewrite or permission entry")
+	if len(spec.Rewrite) > 0 {
+		issues = append(issues, "top-level rewrite is no longer supported; cc-bash-proxy no longer rewrites commands. Use permission.command / env / patterns, and rely on parser-backed normalization for evaluation.")
+	}
+	if IsZeroPermissionSpec(spec.Permission) {
+		issues = append(issues, "must set at least one permission entry")
 	}
 	switch strings.TrimSpace(spec.ClaudePermissionMergeMode) {
 	case "", "migration_compat", "strict", "cc_bash_proxy_authoritative":
 	default:
 		issues = append(issues, "claude_permission_merge_mode must be one of migration_compat, strict, or cc_bash_proxy_authoritative")
-	}
-	for i, step := range spec.Rewrite {
-		prefix := fmt.Sprintf("rewrite[%d]", i)
-		issues = append(issues, ValidateRewriteStep(prefix, step)...)
 	}
 	for i, rule := range spec.Permission.Deny {
 		issues = append(issues, ValidatePermissionRule(fmt.Sprintf("permission.deny[%d]", i), rule, "deny")...)
@@ -2358,48 +2270,6 @@ func ValidatePipeline(spec PipelineSpec) []string {
 		issues = append(issues, ValidatePermissionRule(fmt.Sprintf("permission.allow[%d]", i), rule, "allow")...)
 	}
 	issues = append(issues, ValidatePipelineTest("test", spec.Test)...)
-	return issues
-}
-
-func ValidateRewriteStep(prefix string, step RewriteStepSpec) []string {
-	var issues []string
-	issues = append(issues, ValidateSelector(prefix, step.Match, step.Pattern, step.Patterns, false, false)...)
-	primitiveCount := 0
-	if step.UnwrapShellDashC {
-		primitiveCount++
-	}
-	if !IsZeroUnwrapWrapperSpec(step.UnwrapWrapper) {
-		primitiveCount++
-		issues = append(issues, validateNonEmptyStrings(prefix+".unwrap_wrapper.wrappers", step.UnwrapWrapper.Wrappers)...)
-	}
-	if !IsZeroMoveFlagToEnvSpec(step.MoveFlagToEnv) {
-		primitiveCount++
-		if strings.TrimSpace(step.MoveFlagToEnv.Flag) == "" {
-			issues = append(issues, prefix+".move_flag_to_env.flag must be non-empty")
-		}
-		if strings.TrimSpace(step.MoveFlagToEnv.Env) == "" {
-			issues = append(issues, prefix+".move_flag_to_env.env must be non-empty")
-		}
-	}
-	if !IsZeroMoveEnvToFlagSpec(step.MoveEnvToFlag) {
-		primitiveCount++
-		if strings.TrimSpace(step.MoveEnvToFlag.Env) == "" {
-			issues = append(issues, prefix+".move_env_to_flag.env must be non-empty")
-		}
-		if strings.TrimSpace(step.MoveEnvToFlag.Flag) == "" {
-			issues = append(issues, prefix+".move_env_to_flag.flag must be non-empty")
-		}
-	}
-	if step.StripCommandPath {
-		primitiveCount++
-	}
-	switch {
-	case primitiveCount == 0:
-		issues = append(issues, prefix+" must set exactly one rewrite primitive")
-	case primitiveCount > 1:
-		issues = append(issues, prefix+" must set exactly one rewrite primitive")
-	}
-	issues = append(issues, ValidateRewriteTest(prefix+".test", step.Test)...)
 	return issues
 }
 
@@ -2791,29 +2661,6 @@ func ValidateHelmfileSemanticMatchSpec(prefix string, semantic SemanticMatchSpec
 	return issues
 }
 
-func ValidateRewriteTest(prefix string, test RewriteTestSpec) []string {
-	var issues []string
-	if len(test) == 0 {
-		issues = append(issues, prefix+" must be non-empty")
-	}
-	for i, c := range test {
-		hasPass := strings.TrimSpace(c.Pass) != ""
-		hasIn := strings.TrimSpace(c.In) != ""
-		hasOut := strings.TrimSpace(c.Out) != ""
-		switch {
-		case hasPass && (hasIn || hasOut):
-			issues = append(issues, fmt.Sprintf("%s[%d] must use either pass or in/out", prefix, i))
-		case hasPass:
-			continue
-		case hasIn && hasOut:
-			continue
-		default:
-			issues = append(issues, fmt.Sprintf("%s[%d] must set pass or both in and out", prefix, i))
-		}
-	}
-	return issues
-}
-
 func ValidatePermissionTest(prefix string, test PermissionTestSpec, effect string) []string {
 	var issues []string
 	switch effect {
@@ -2857,6 +2704,9 @@ func ValidatePipelineTest(prefix string, test PipelineTestSpec) []string {
 	for i, c := range test {
 		if strings.TrimSpace(c.In) == "" {
 			issues = append(issues, fmt.Sprintf("%s[%d].in must be non-empty", prefix, i))
+		}
+		if strings.TrimSpace(c.Rewritten) != "" {
+			issues = append(issues, fmt.Sprintf("%s[%d].rewritten is no longer supported; cc-bash-proxy does not rewrite commands", prefix, i))
 		}
 		switch c.Decision {
 		case "allow", "ask", "deny":
@@ -3099,25 +2949,6 @@ func hasHelmfileOnlySemanticFields(semantic SemanticMatchSpec) bool {
 		len(semantic.StateValuesFileIn) > 0 ||
 		len(semantic.StateValuesSetKeysContains) > 0 ||
 		len(semantic.StateValuesSetStringKeysContains) > 0
-}
-
-func IsZeroMoveFlagToEnvSpec(spec MoveFlagToEnvSpec) bool {
-	return strings.TrimSpace(spec.Flag) == "" && strings.TrimSpace(spec.Env) == ""
-}
-
-func IsZeroMoveEnvToFlagSpec(spec MoveEnvToFlagSpec) bool {
-	return strings.TrimSpace(spec.Env) == "" && strings.TrimSpace(spec.Flag) == ""
-}
-
-func IsZeroUnwrapWrapperSpec(spec UnwrapWrapperSpec) bool {
-	return len(spec.Wrappers) == 0
-}
-
-func RewriteStrict(step RewriteStepSpec) bool {
-	if step.Strict == nil {
-		return true
-	}
-	return *step.Strict
 }
 
 func validateNonEmptyStrings(prefix string, values []string) []string {

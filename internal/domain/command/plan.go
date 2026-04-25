@@ -184,6 +184,14 @@ type CommandPlan struct {
 	Shape                  ShellShape
 	SafeForStructuredAllow bool
 	Diagnostics            []Diagnostic
+	Normalized             []NormalizedCommand
+}
+
+type NormalizedCommand struct {
+	OriginalToken string
+	CommandName   string
+	Raw           string
+	Reason        string
 }
 
 type ShellShape struct {
@@ -248,6 +256,8 @@ func ParseWithRegistry(raw string, registry *CommandParserRegistry) CommandPlan 
 
 	plan.Commands = walker.commands
 	plan.Shape = walker.shape.finalize()
+	plan.Diagnostics = append(plan.Diagnostics, walker.diagnostics...)
+	plan.Normalized = append(plan.Normalized, walker.normalized...)
 	// CommandPlan describes shell shape and CLI semantics; invocation owns the
 	// safety gate used by allow-list matching.
 	plan.SafeForStructuredAllow = plan.Shape.Kind == ShellShapeSimple &&
@@ -388,10 +398,12 @@ func dedupeStrings(values []string) []string {
 }
 
 type planWalker struct {
-	raw      string
-	registry *CommandParserRegistry
-	shape    ShellShape
-	commands []Command
+	raw         string
+	registry    *CommandParserRegistry
+	shape       ShellShape
+	commands    []Command
+	diagnostics []Diagnostic
+	normalized  []NormalizedCommand
 }
 
 func (w *planWalker) visitStmt(stmt *syntax.Stmt) {
@@ -468,8 +480,64 @@ func (w *planWalker) visitCall(call *syntax.CallExpr) {
 	raw := w.nodeRaw(call)
 	inv := NewInvocation(raw)
 	if cmd, ok := w.registry.Parse(inv); ok {
+		if cmd.ProgramToken != "" && cmd.Program != cmd.ProgramToken {
+			w.normalized = append(w.normalized, NormalizedCommand{
+				OriginalToken: cmd.ProgramToken,
+				CommandName:   cmd.Program,
+				Raw:           cmd.Raw,
+				Reason:        "basename",
+			})
+		}
+		if inner, ok := shellDashCInnerCommand(cmd); ok {
+			innerPlan := ParseWithRegistry(inner, w.registry)
+			w.shape = mergeShellShape(w.shape, innerPlan.Shape)
+			w.commands = append(w.commands, innerPlan.Commands...)
+			w.diagnostics = append(w.diagnostics, innerPlan.Diagnostics...)
+			w.normalized = append(w.normalized, innerPlan.Normalized...)
+			w.normalized = append(w.normalized, NormalizedCommand{
+				OriginalToken: cmd.ProgramToken,
+				CommandName:   cmd.Program,
+				Raw:           cmd.Raw,
+				Reason:        "shell_dash_c",
+			})
+			return
+		}
 		w.commands = append(w.commands, cmd)
 	}
+}
+
+func shellDashCInnerCommand(cmd Command) (string, bool) {
+	if !isShellCommandName(cmd.Program) {
+		return "", false
+	}
+	if len(cmd.RawWords) < 2 || cmd.RawWords[0] != "-c" {
+		return "", false
+	}
+	return cmd.RawWords[1], true
+}
+
+func isShellCommandName(name string) bool {
+	switch name {
+	case "bash", "sh", "zsh", "dash", "ksh":
+		return true
+	default:
+		return false
+	}
+}
+
+func mergeShellShape(a ShellShape, b ShellShape) ShellShape {
+	if b.Kind == ShellShapeUnknown {
+		a.Kind = ShellShapeUnknown
+	}
+	a.HasPipeline = a.HasPipeline || b.HasPipeline
+	a.HasConditional = a.HasConditional || b.HasConditional
+	a.HasSequence = a.HasSequence || b.HasSequence
+	a.HasBackground = a.HasBackground || b.HasBackground
+	a.HasRedirection = a.HasRedirection || b.HasRedirection
+	a.HasSubshell = a.HasSubshell || b.HasSubshell
+	a.HasCommandSubstitution = a.HasCommandSubstitution || b.HasCommandSubstitution
+	a.HasProcessSubstitution = a.HasProcessSubstitution || b.HasProcessSubstitution
+	return a
 }
 
 func (w *planWalker) visitWord(word *syntax.Word) {

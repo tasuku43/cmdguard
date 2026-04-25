@@ -106,25 +106,14 @@ func runClaudeHookMapTest(t *testing.T, spec hookEnvSpec) map[string]any {
 	return payload
 }
 
-func TestRunHookClaudeAllowReturnsAllowAndUpdatedInput(t *testing.T) {
+func TestRunHookClaudeAllowReturnsAllowWithoutUpdatedInput(t *testing.T) {
 	home := t.TempDir()
 	writeClaudeSettings(t, home, `{
   "permissions": {
-    "allow": ["Bash(AWS_PROFILE=dev aws sts:*)"]
+    "allow": ["Bash(aws --profile dev sts:*)"]
   }
 }`)
-	writeUserConfig(t, home, `rewrite:
-  - match:
-      command: aws
-      args_contains: ["--profile"]
-    move_flag_to_env:
-      flag: "--profile"
-      env: "AWS_PROFILE"
-    test:
-      - in: "aws --profile dev sts get-caller-identity"
-        out: "AWS_PROFILE=dev aws sts get-caller-identity"
-      - pass: "AWS_PROFILE=dev aws sts get-caller-identity"
-permission:
+	writeUserConfig(t, home, `permission:
   allow:
     - command:
 
@@ -133,18 +122,14 @@ permission:
         semantic:
 
           service: sts
-
-      env:
-
-        requires: ["AWS_PROFILE"]
+          profile: dev
       test:
         allow:
-          - "AWS_PROFILE=dev aws sts get-caller-identity"
+          - "aws --profile dev sts get-caller-identity"
         pass:
-          - "AWS_PROFILE=dev aws s3 ls"
+          - "aws --profile dev s3 ls"
 test:
   - in: "aws --profile dev sts get-caller-identity"
-    rewritten: "AWS_PROFILE=dev aws sts get-caller-identity"
     decision: allow
 `)
 
@@ -166,8 +151,7 @@ test:
 	if hookOut["permissionDecision"] != "allow" {
 		t.Fatalf("payload = %+v", payload)
 	}
-	updatedInput := hookOut["updatedInput"].(map[string]any)
-	if updatedInput["command"] != "AWS_PROFILE=dev aws sts get-caller-identity" {
+	if _, ok := hookOut["updatedInput"]; ok {
 		t.Fatalf("payload = %+v", payload)
 	}
 }
@@ -267,9 +251,9 @@ test:
 	}
 }
 
-func TestRunHookClaudeRewriteIncludesRewriteSystemMessage(t *testing.T) {
-	payload := runClaudeHookMapTest(t, hookEnvSpec{
-		UserConfig: `rewrite:
+func TestRunVerifyRejectsRewriteConfig(t *testing.T) {
+	home := t.TempDir()
+	writeUserConfig(t, home, `rewrite:
   - match:
       command: aws
       args_contains: ["--profile"]
@@ -302,12 +286,17 @@ test:
   - in: "aws --profile dev sts get-caller-identity"
     rewritten: "AWS_PROFILE=dev aws sts get-caller-identity"
     decision: allow
-`,
-		Command: "aws --profile dev sts get-caller-identity",
-	})
-	message, ok := payload["systemMessage"].(string)
-	if !ok || !strings.Contains(message, "rewrote") {
-		t.Fatalf("expected rewrite systemMessage, payload=%+v", payload)
+`)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"verify", "--format", "json"}, Streams{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: home})
+	if code == 0 {
+		t.Fatalf("code = 0, want failure stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "top-level rewrite is no longer supported") {
+		t.Fatalf("stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }
 
@@ -928,16 +917,6 @@ test:
 func TestRunHookClaudeMergesGlobalAndLocalPolicyAndSettings(t *testing.T) {
 	payload := runClaudeHookTest(t, hookEnvSpec{
 		UserConfig: `claude_permission_merge_mode: migration_compat
-rewrite:
-  - match:
-      command: aws
-      args_contains: ["--profile"]
-    move_flag_to_env:
-      flag: "--profile"
-      env: "AWS_PROFILE"
-    test:
-      - in: "aws --profile dev sts get-caller-identity"
-        out: "AWS_PROFILE=dev aws sts get-caller-identity"
 permission:
   ask:
     - command:
@@ -949,12 +928,11 @@ permission:
           service: sts
       test:
         ask:
-          - "AWS_PROFILE=dev aws sts get-caller-identity"
+          - "aws --profile dev sts get-caller-identity"
         pass:
           - "git status"
 test:
   - in: "aws --profile dev sts get-caller-identity"
-    rewritten: "AWS_PROFILE=dev aws sts get-caller-identity"
     decision: ask
 `,
 		LocalConfig: `permission:
@@ -979,7 +957,7 @@ test:
 }`,
 		ClaudeLocalSettings: `{
   "permissions": {
-    "allow": ["Bash(AWS_PROFILE=dev aws sts:*)"]
+    "allow": ["Bash(aws --profile dev sts:*)"]
   }
 }`,
 		Command: "aws --profile dev sts get-caller-identity",
@@ -988,8 +966,7 @@ test:
 	if payload.HookSpecificOutput["permissionDecision"] != "allow" {
 		t.Fatalf("payload=%+v", payload)
 	}
-	updated := payload.HookSpecificOutput["updatedInput"].(map[string]any)
-	if updated["command"] != "AWS_PROFILE=dev aws sts get-caller-identity" {
+	if _, ok := payload.HookSpecificOutput["updatedInput"]; ok {
 		t.Fatalf("payload=%+v", payload)
 	}
 }
@@ -1096,16 +1073,7 @@ test:
 
 func TestRunHookClaudeDeniesWhenArtifactMissingByDefault(t *testing.T) {
 	home := t.TempDir()
-	writeUserConfig(t, home, `rewrite:
-  - match:
-      command_in: ["bash", "sh"]
-      args_contains: ["-c"]
-    unwrap_shell_dash_c: true
-    test:
-      - in: "bash -c 'git status'"
-        out: "git status"
-      - pass: "bash script.sh"
-permission:
+	writeUserConfig(t, home, `permission:
   allow:
     - command:
 
@@ -1116,12 +1084,11 @@ permission:
           verb: status
       test:
         allow:
-          - "git status"
+          - "bash -c 'git status'"
         pass:
           - "git diff"
 test:
   - in: "bash -c 'git status'"
-    rewritten: "git status"
     decision: allow
 `)
 
@@ -1266,16 +1233,7 @@ test:
 
 func TestRunHookClaudeAutoVerifyVerifiesWhenArtifactMissing(t *testing.T) {
 	home := t.TempDir()
-	writeUserConfig(t, home, `rewrite:
-  - match:
-      command_in: ["bash", "sh"]
-      args_contains: ["-c"]
-    unwrap_shell_dash_c: true
-    test:
-      - in: "bash -c 'git status'"
-        out: "git status"
-      - pass: "bash script.sh"
-permission:
+	writeUserConfig(t, home, `permission:
   allow:
     - command:
 
@@ -1286,12 +1244,11 @@ permission:
           verb: status
       test:
         allow:
-          - "git status"
+          - "bash -c 'git status'"
         pass:
           - "git diff"
 test:
   - in: "bash -c 'git status'"
-    rewritten: "git status"
     decision: allow
 `)
 

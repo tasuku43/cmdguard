@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/tasuku43/cc-bash-proxy/internal/adapter/claude"
-	"github.com/tasuku43/cc-bash-proxy/internal/adapter/policyconfig"
 	"github.com/tasuku43/cc-bash-proxy/internal/domain/policy"
 	"gopkg.in/yaml.v3"
 )
@@ -387,7 +386,6 @@ func decodeFile(src Source, data string) (File, error) {
 func validateFile(file File) []string {
 	var issues []string
 	issues = append(issues, policy.ValidatePipeline(file)...)
-	issues = append(issues, policyconfig.ValidateRewrites(file.Rewrite)...)
 	return issues
 }
 

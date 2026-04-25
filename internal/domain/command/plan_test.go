@@ -32,6 +32,87 @@ func TestParseCommandPlanSimpleGitStatus(t *testing.T) {
 	}
 }
 
+func TestParseCommandPlanNormalizesAbsoluteCommandPathForEvaluation(t *testing.T) {
+	plan := Parse("/usr/bin/git status")
+
+	if len(plan.Commands) != 1 {
+		t.Fatalf("len(Commands) = %d, want 1", len(plan.Commands))
+	}
+	cmd := plan.Commands[0]
+	if cmd.ProgramToken != "/usr/bin/git" {
+		t.Fatalf("ProgramToken = %q, want /usr/bin/git", cmd.ProgramToken)
+	}
+	if cmd.Program != "git" {
+		t.Fatalf("Program = %q, want git", cmd.Program)
+	}
+	if cmd.Git == nil || cmd.Git.Verb != "status" {
+		t.Fatalf("Git semantic = %+v, want status", cmd.Git)
+	}
+	if len(plan.Normalized) == 0 || plan.Normalized[0].OriginalToken != "/usr/bin/git" || plan.Normalized[0].CommandName != "git" {
+		t.Fatalf("Normalized = %+v, want basename normalization", plan.Normalized)
+	}
+}
+
+func TestParseCommandPlanShellDashCBuiltInEvaluation(t *testing.T) {
+	tests := []string{
+		"bash -c 'git status'",
+		"sh -c 'git status'",
+		"zsh -c 'git status'",
+		"dash -c 'git status'",
+		"ksh -c 'git status'",
+		"/bin/bash -c 'git status'",
+		"/bin/sh -c 'git status'",
+		"env bash -c 'git status'",
+		"/usr/bin/env bash -c 'git status'",
+		"command bash -c 'git status'",
+		"exec sh -c 'git status'",
+		"sudo bash -c 'git status'",
+		"sudo -u root bash -c 'git status'",
+		"nohup bash -c 'git status'",
+		"timeout 10 bash -c 'git status'",
+		"timeout --signal TERM 10 bash -c 'git status'",
+		"busybox sh -c 'git status'",
+	}
+
+	for _, raw := range tests {
+		t.Run(raw, func(t *testing.T) {
+			plan := Parse(raw)
+			if len(plan.Commands) != 1 {
+				t.Fatalf("len(Commands) = %d, want 1; diagnostics=%+v plan=%+v", len(plan.Commands), plan.Diagnostics, plan)
+			}
+			cmd := plan.Commands[0]
+			if cmd.Program != "git" || cmd.ProgramToken != "git" || cmd.Raw != "git status" {
+				t.Fatalf("command = %+v, want inner git status", cmd)
+			}
+			if cmd.Git == nil || cmd.Git.Verb != "status" {
+				t.Fatalf("Git semantic = %+v, want status", cmd.Git)
+			}
+		})
+	}
+}
+
+func TestParseCommandPlanShellDashCNonDashCPassThrough(t *testing.T) {
+	tests := []string{
+		"bash script.sh",
+		"sh script.sh",
+		"env bash script.sh",
+	}
+	for _, raw := range tests {
+		t.Run(raw, func(t *testing.T) {
+			plan := Parse(raw)
+			if len(plan.Commands) != 1 {
+				t.Fatalf("len(Commands) = %d, want 1", len(plan.Commands))
+			}
+			if plan.Commands[0].Raw != raw && plan.Commands[0].Raw != "bash script.sh" {
+				t.Fatalf("Raw = %q, want outer shell command", plan.Commands[0].Raw)
+			}
+			if plan.Commands[0].Program == "git" {
+				t.Fatalf("Program = git, want shell command")
+			}
+		})
+	}
+}
+
 func TestGitParserBuildsSemanticFields(t *testing.T) {
 	tests := []struct {
 		name string

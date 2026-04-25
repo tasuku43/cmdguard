@@ -17,9 +17,9 @@ Declarative, testable command policy for AI-agent shell commands.
 Typical workflow:
   1. Edit ~/.config/cc-bash-proxy/cc-bash-proxy.yml
   2. Optionally add .cc-bash-proxy/cc-bash-proxy.yaml in the project
-  3. Add rewrite, permission, and E2E tests
+  3. Add permission and E2E tests
   4. Run cc-bash-proxy verify
-  5. Let Claude Code call cc-bash-proxy hook --rtk from PreToolUse
+  5. Let Claude Code call cc-bash-proxy hook from PreToolUse
 
 Usage:
   cc-bash-proxy <command> [flags]
@@ -37,7 +37,6 @@ Help:
   cc-bash-proxy help <command>
   cc-bash-proxy <command> --help
   cc-bash-proxy help config
-  cc-bash-proxy help rewrite
   cc-bash-proxy help match
   cc-bash-proxy help semantic
   cc-bash-proxy help semantic git
@@ -114,15 +113,14 @@ Examples:
 		fmt.Fprint(w, `cc-bash-proxy hook
 
 Claude Code hook entrypoint.
-Reads stdin JSON, evaluates the configured rewrite and permission pipeline, and
+Reads stdin JSON, parses the command, evaluates permission policy, and
 returns Claude Code hook JSON for allow, ask, deny, or error outcomes.
 
 Usage:
   cc-bash-proxy hook [--rtk] [--auto-verify]
 
 Options:
-  --rtk          run "rtk rewrite" once after cc-bash-proxy policy evaluation and return
-                 the final rewritten command if it changes
+  --rtk          run "rtk rewrite" once after cc-bash-proxy policy evaluation
   --auto-verify  regenerate verified hook artifacts when they are missing or stale
 
 Note:
@@ -172,9 +170,13 @@ Config files live at:
 
 Top-level sections are:
   - claude_permission_merge_mode: strict / migration_compat / cc_bash_proxy_authoritative
-  - rewrite: ordered rewrite pipeline
   - permission: deny / ask / allow buckets
   - test: end-to-end expect cases
+
+Top-level rewrite is no longer supported. cc-bash-proxy never changes the
+command string it evaluates or returns to Claude. Parser-backed normalization is
+evaluation-only: shell -c wrappers are inspected as inner commands, absolute
+paths match by basename, and AWS profile flags are parsed semantically.
 
 Permission merge mode:
   claude_permission_merge_mode controls how Claude settings.json permissions and
@@ -196,22 +198,6 @@ Decision order:
   deny wins over ask, ask wins over allow, and abstain means no local rule
   matched. When no permission rule matches, the fallback decision is ask.
 
-Rewrite step example:
-  rewrite:
-    - match:
-        command: aws
-        args_contains:
-          - "--profile"
-      move_flag_to_env:
-        flag: "--profile"
-        env: "AWS_PROFILE"
-      strict: true
-      continue: true
-      test:
-        - in: "aws --profile read-only-profile s3 ls"
-          out: "AWS_PROFILE=read-only-profile aws s3 ls"
-        - pass: "AWS_PROFILE=read-only-profile aws s3 ls"
-
 Permission rule example:
   permission:
     allow:
@@ -231,8 +217,7 @@ Permission rule example:
 
 E2E test example:
   test:
-    - in: "aws --profile read-only-profile sts get-caller-identity"
-      rewritten: "AWS_PROFILE=read-only-profile aws sts get-caller-identity"
+    - in: "AWS_PROFILE=read-only-profile aws sts get-caller-identity"
       decision: allow
 
 For permission predicate fields, run:
@@ -241,35 +226,16 @@ For permission predicate fields, run:
 For semantic command schemas, run:
   cc-bash-proxy help semantic
 
-For rewrite primitives, run:
-  cc-bash-proxy help rewrite
 `)
 	case "match":
 		fmt.Fprint(w, `cc-bash-proxy help match
 
-Supported match fields:
 Permission rules do not use match or pattern. Permission rules use:
   - command: command name plus command-specific semantic matcher
   - env: execution environment matcher with requires and missing
   - patterns: raw command string regex list
 Permission command does not support command_in; use multiple patterns for
 multi-command raw fallbacks.
-
-rewrite.match is separate and unchanged.
-
-Rewrite match fields:
-  - command: exact executable name
-  - command_in: executable must be one of these names
-  - command_is_absolute_path: executable token must be an absolute path
-  - subcommand: exact first subcommand
-  - args_contains: legacy raw-word tokens that must exist
-  - args_prefixes: legacy raw-word tokens that must start with these prefixes
-  - env_requires: env vars that must be present
-  - env_missing: env vars that must be absent
-  - semantic: unsupported for rewrite.match
-
-args_contains and args_prefixes inspect command words after the executable
-token, before command-specific semantic argument parsing.
 
 permission command.semantic:
   command.semantic is command-specific. The schema is selected by exact
@@ -304,39 +270,6 @@ patterns is the raw regex escape hatch for permission rules.
 Example:
   patterns:
     - '^\s*helm\s+upgrade\b'
-`)
-	case "rewrite":
-		fmt.Fprint(w, `cc-bash-proxy help rewrite
-
-Supported rewrite primitives:
-  - unwrap_shell_dash_c: unwrap safe "bash -c 'single command'" payloads
-  - unwrap_wrapper: strip safe wrappers such as env, command, exec, nohup
-  - move_flag_to_env: move a flag value into an env assignment
-  - move_env_to_flag: move an env assignment into a flag
-  - strip_command_path: convert an absolute-path command token into its basename
-  - continue: after a successful rewrite, restart evaluation from the top
-
-Each rewrite step is an element in the top-level rewrite array and may add an
-optional match block. If match is omitted, the step is considered for every
-command.
-
-Example:
-  rewrite:
-    - match:
-        command: aws
-        args_contains:
-          - "--profile"
-      move_flag_to_env:
-        flag: "--profile"
-        env: "AWS_PROFILE"
-      strict: true
-      continue: true
-      test:
-        - in: "aws --profile read-only-profile s3 ls"
-          out: "AWS_PROFILE=read-only-profile aws s3 ls"
-        - pass: "AWS_PROFILE=read-only-profile aws s3 ls"
-
-Each step may set exactly one rewrite primitive.
 `)
 	default:
 		writeUsage(w)
@@ -401,7 +334,7 @@ Notes:
 	}
 	fmt.Fprint(w, "\nValidation rules:\n")
 	fmt.Fprint(w, "  - permission command.semantic requires exact command.name.\n")
-	fmt.Fprint(w, "  - rewrite.match.semantic is unsupported.\n")
+	fmt.Fprint(w, "  - top-level rewrite is unsupported.\n")
 	fmt.Fprint(w, "  - unsupported fields and unsupported value types fail verify.\n")
 	fmt.Fprint(w, "  - GenericParser fallback never satisfies semantic match.\n")
 	if len(schema.Examples) > 0 {

@@ -28,8 +28,8 @@ before a fix is prepared.
 
 ## Verification Guidance
 
-Because `cc-bash-proxy` can rewrite commands before execution, users should treat the
-installed binary as part of their execution trust boundary.
+Because `cc-bash-proxy` gates shell permission decisions before execution, users
+should treat the installed binary as part of their execution trust boundary.
 
 Before relying on a downloaded build:
 

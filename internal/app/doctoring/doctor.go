@@ -47,8 +47,6 @@ func Run(loaded configrepo.Loaded, tool string, cwd string, home string) Report 
 		checks = append(checks,
 			Check{ID: "config.parse", Category: "config", Status: StatusPass, Message: "configuration files parsed"},
 			Check{ID: "config.schema", Category: "config", Status: StatusPass, Message: "configuration schema is valid"},
-			Check{ID: "rewrite.matcher-validate", Category: "rewrite", Status: StatusPass, Message: "rewrite matchers are valid"},
-			Check{ID: "rewrite.tests-present", Category: "rewrite", Status: StatusPass, Message: "rewrite tests are present"},
 			Check{ID: "permission.tests-present", Category: "permission", Status: StatusPass, Message: "permission tests are present"},
 			Check{ID: "test.e2e-present", Category: "test", Status: StatusPass, Message: "end-to-end tests are present"},
 		)
@@ -57,33 +55,27 @@ func Run(loaded configrepo.Loaded, tool string, cwd string, home string) Report 
 		checks = append(checks,
 			Check{ID: "config.parse", Category: "config", Status: StatusFail, Message: msg},
 			Check{ID: "config.schema", Category: "config", Status: StatusFail, Message: msg},
-			Check{ID: "rewrite.matcher-validate", Category: "rewrite", Status: StatusFail, Message: msg},
-			Check{ID: "rewrite.tests-present", Category: "rewrite", Status: StatusFail, Message: msg},
 			Check{ID: "permission.tests-present", Category: "permission", Status: StatusFail, Message: msg},
 			Check{ID: "test.e2e-present", Category: "test", Status: StatusFail, Message: msg},
 		)
+		if strings.Contains(msg, "top-level rewrite is no longer supported") {
+			checks = append(checks, Check{
+				ID:       "config.rewrite-migration",
+				Category: "config",
+				Status:   StatusFail,
+				Message:  "rewrite migration: unwrap_shell_dash_c is now built-in CommandPlan parsing; strip_command_path is basename command normalization; move_flag_to_env is no longer supported, use AWS semantic profile matching and document preferred command style in CLAUDE.md or user docs",
+			})
+		}
 	}
 
 	if len(loaded.Errors) == 0 {
 		if err := testsPass(loaded.Pipeline, tool, cwd, home); err != nil {
 			checks = append(checks, Check{ID: "tests.pass", Category: "test", Status: StatusFail, Message: err.Error()})
 		} else {
-			checks = append(checks, Check{ID: "tests.pass", Category: "test", Status: StatusPass, Message: "rewrite, permission, and end-to-end tests match expectations"})
+			checks = append(checks, Check{ID: "tests.pass", Category: "test", Status: StatusPass, Message: "permission and end-to-end tests match expectations"})
 		}
 	} else {
 		checks = append(checks, Check{ID: "tests.pass", Category: "test", Status: StatusFail, Message: "skipped because configuration is invalid"})
-	}
-
-	if ids := relaxedRewriteNames(loaded.Pipeline); len(ids) > 0 {
-		checks = append(checks, Check{ID: "rewrite.relaxed-contracts", Category: "rewrite", Status: StatusWarn, Message: "relaxed rewrite contracts enabled: " + strings.Join(ids, ", ")})
-	} else {
-		checks = append(checks, Check{ID: "rewrite.relaxed-contracts", Category: "rewrite", Status: StatusPass, Message: "all rewrite contracts use strict validation"})
-	}
-
-	if warning := broadnessWarning(loaded.Pipeline); warning != "" {
-		checks = append(checks, Check{ID: "rewrite.pattern-broadness", Category: "diagnostics", Status: StatusWarn, Message: warning})
-	} else {
-		checks = append(checks, Check{ID: "rewrite.pattern-broadness", Category: "diagnostics", Status: StatusPass, Message: "rewrite matches are not obviously broad"})
 	}
 
 	if ids := envOnlyAllowNames(loaded.Pipeline); len(ids) > 0 {
@@ -168,21 +160,6 @@ func HasFailures(report Report) bool {
 }
 
 func testsPass(p policy.Pipeline, tool string, cwd string, home string) error {
-	for i, step := range p.Rewrite {
-		for _, ex := range step.Test {
-			if strings.TrimSpace(ex.Pass) != "" {
-				if rewritten, ok := policyTestApplyRewrite(step, ex.Pass); ok && rewritten != "" {
-					return &exampleError{Scope: "rewrite", Name: stepName(step, i), Kind: "pass", Example: ex.Pass}
-				}
-				continue
-			}
-			rewritten, ok := policyTestApplyRewrite(step, ex.In)
-			if !ok || rewritten != ex.Out {
-				return &exampleError{Scope: "rewrite", Name: stepName(step, i), Kind: "expect", Example: ex.In}
-			}
-		}
-	}
-
 	checkPermission := func(scope string, rules []policy.PermissionRuleSpec, effect string) error {
 		for i, rule := range rules {
 			var expect []string
@@ -226,27 +203,8 @@ func testsPass(p policy.Pipeline, tool string, cwd string, home string) error {
 		if decision.Outcome != ex.Decision {
 			return &exampleError{Scope: "test", Name: scopeName("e2e", i), Kind: "decision", Example: ex.In}
 		}
-		if strings.TrimSpace(ex.Rewritten) != "" && decision.Command != ex.Rewritten {
-			return &exampleError{Scope: "test", Name: scopeName("e2e", i), Kind: "rewritten", Example: ex.In}
-		}
 	}
 	return nil
-}
-
-func policyTestApplyRewrite(step policy.RewriteStepSpec, command string) (string, bool) {
-	if !policy.RewriteStepMatches(step, command) {
-		return "", false
-	}
-	return policy.ApplyRewriteStepForTest(step, command)
-}
-
-func broadnessWarning(p policy.Pipeline) string {
-	for i, step := range p.Rewrite {
-		if policy.IsZeroMatchSpec(step.Match) && strings.TrimSpace(step.Pattern) == "" && len(step.Patterns) == 0 {
-			return "rewrite[" + scopeName("global", i) + "] applies to all commands"
-		}
-	}
-	return ""
 }
 
 func envOnlyAllowNames(p policy.Pipeline) []string {
@@ -266,16 +224,6 @@ func permissionRuleMatchesEffect(rule policy.PermissionRuleSpec, command string,
 	return policy.PermissionRuleMatches(rule, command)
 }
 
-func relaxedRewriteNames(p policy.Pipeline) []string {
-	var ids []string
-	for i, step := range p.Rewrite {
-		if !policy.RewriteStrict(step) {
-			ids = append(ids, stepName(step, i))
-		}
-	}
-	return ids
-}
-
 type exampleError struct {
 	Scope   string
 	Name    string
@@ -289,14 +237,6 @@ func (e *exampleError) Error() string {
 
 func scopeName(prefix string, idx int) string {
 	return prefix + "[" + fmtInt(idx) + "]"
-}
-
-func stepName(step policy.RewriteStepSpec, idx int) string {
-	name := policy.RewriteStepName(step)
-	if name == "" {
-		return scopeName("rewrite", idx)
-	}
-	return name
 }
 
 func fmtInt(v int) string {

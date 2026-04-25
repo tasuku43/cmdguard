@@ -41,7 +41,7 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 Treat the following changes as security-sensitive:
 
 - hook handling and Claude Code integration
-- rewrite primitives and rewrite flow control
+- parser-backed normalization and permission evaluation
 - config loading, cache loading, and policy evaluation
 - binary provenance and verification behavior
 

@@ -50,10 +50,8 @@ func userConfigBase(home string, xdgConfigHome string) string {
 
 const starterConfig = `permission:
   deny:
-    - match:
-        command: git
-        args_contains:
-          - "-C"
+    - patterns:
+        - "^git\\s+-C\\b"
       message: "git -C is blocked. Change into the target directory and rerun the command."
       test:
         deny:

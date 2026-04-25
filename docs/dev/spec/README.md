@@ -14,11 +14,8 @@ behavior that should be treated as current contract.
 but coding agents and contributors must not treat those documents as shipped
 behavior.
 
-The repository uses a pipeline model with:
-
-1. rewrite
-2. permission
-3. end-to-end testing
+The repository uses a permission-only policy model with parser-backed
+normalization for evaluation.
 
 ## Metadata rules
 
@@ -35,10 +32,10 @@ The repository uses a pipeline model with:
 
 The current `cc-bash-proxy` contract prioritizes:
 
-1. Invocation canonicalization before permission evaluation
+1. Permission decisions without changing the executed command string
 2. `cc-bash-proxy`-owned permission decisions
 3. Simple caller input, rich internal normalization
-4. Deterministic rewrite ordering and deterministic permission bucket ordering
+4. Deterministic permission bucket ordering
 5. Reviewable, testable policy authoring
 
 ## Index
@@ -49,10 +46,10 @@ The current `cc-bash-proxy` contract prioritizes:
 |---|---|---|
 | `core/COMPATIBILITY.md` | implemented | versioning and compatibility stance |
 | `core/CONFIG.md` | implemented | config locations, merge order, and invalid-state handling |
-| `core/EVALUATION.md` | implemented | rewrite phase, permission phase, compound command evaluation, patterns allow, and fail-closed behavior |
+| `core/EVALUATION.md` | implemented | permission phase, evaluation-only normalization, compound command evaluation, patterns allow, and fail-closed behavior |
 | `core/INPUT_MODEL.md` | implemented | supported stdin payloads and normalized invocation model |
 | `core/PARSER_MODEL.md` | implemented | command parser layers and match stability rules |
-| `core/RULE_SCHEMA.md` | implemented | YAML schema for `rewrite`, `permission`, and `test` |
+| `core/RULE_SCHEMA.md` | implemented | YAML schema for `permission` and `test` |
 | `core/TEST_MATRIX.md` | implemented | security regression test matrix and invariants |
 | `core/OUTPUT_CONTRACT.md` | proposed | output contract for allow, ask, deny, and error |
 | `core/VERIFY_ARTIFACT.md` | proposed | trust-oriented verified policy artifact details |
