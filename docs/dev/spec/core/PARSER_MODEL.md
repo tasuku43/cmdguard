@@ -12,7 +12,8 @@ This document defines how `cc-bash-proxy` turns a shell invocation into a
 `Command` before permission evaluation.
 
 Permission decisions depend on the meaning of `Command`, so parser behavior
-must be stable when new CLI parsers such as `aws` or `kubectl` are added.
+must be stable when new CLI parsers such as `aws`, `kubectl`, or `gh` are
+added.
 
 ## 2. Layers
 
@@ -77,6 +78,8 @@ A CLI-specific parser adds meaning for one program family.
 
 For example, `GitParser` understands supported git global options, identifies
 the git action path, and separates git command options from positional args.
+`GhParser` identifies GitHub CLI areas and verbs, with deeper static semantics
+for `gh api`, `gh pr`, and `gh run`.
 
 Adding a new parser must not change the meaning of existing parser output or
 existing raw-word matchers. It may only improve semantic precision for its own
@@ -104,3 +107,8 @@ decision from `deny` to `allow`.
 
 Trace output must include `Parser` for every parsed command. Commands with
 CLI-specific semantics also set `SemanticParser`.
+
+`match.semantic` is interpreted by exact `match.command`. For example,
+`command: gh` uses the gh semantic schema directly under `semantic`; nested
+forms such as `semantic.gh.area` are invalid. Semantic matchers are
+permission-only and are not supported for rewrite selectors.

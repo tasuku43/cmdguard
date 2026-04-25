@@ -227,7 +227,8 @@ because the semantic schema would be ambiguous. `semantic` is an internal member
 of `match`; it cannot be combined with top-level `pattern` or `patterns`.
 Do not nest another command key under `semantic`: `semantic.service` is valid
 for AWS rules and `semantic.verb` is valid for kubectl rules, while
-`semantic.aws.service` or `semantic.kubectl.verb` is invalid.
+`semantic.aws.service`, `semantic.kubectl.verb`, or `semantic.gh.area` is
+invalid.
 
 For `command: git`, the Git semantic schema is:
 
@@ -332,11 +333,96 @@ sets `force` to true. `-R` and `--recursive` set `recursive` to true. `-f`,
 represented as `verb: rollout` and `subverb: restart`. Manifest files are not
 read; only static CLI argv is parsed.
 
+For `command: gh`, the GitHub CLI semantic schema is:
+
+- common string selectors: `area`, `verb`, `repo`, `hostname`
+- common string-list selectors: `area_in`, `verb_in`, `repo_in`,
+  `hostname_in`
+- common boolean selector: `web`
+- `gh api` string selectors: `method`, `endpoint`, `endpoint_prefix`
+- `gh api` string-list selectors: `method_in`, `endpoint_contains`,
+  `field_keys_contains`, `raw_field_keys_contains`, `header_keys_contains`
+- `gh api` boolean selectors: `paginate`, `input`, `silent`,
+  `include_headers`
+- `gh pr` string selectors: `pr_number`, `base`, `head`, `merge_strategy`
+- `gh pr` string-list selector: `merge_strategy_in`
+- `gh pr` boolean selectors: `draft`, `fill`, `force`, `admin`, `auto`,
+  `delete_branch`
+- `gh run` string selectors: `run_id`, `job`
+- `gh run` boolean selectors: `failed`, `debug`, `force`, `exit_status`
+- flag selectors: `flags_contains`, `flags_prefixes`
+
+Example:
+
+```yaml
+permission:
+  deny:
+    - match:
+        command: gh
+        semantic:
+          area: api
+          method_in:
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+          endpoint_prefix: /repos/
+      message: "GitHub API mutation requires explicit policy"
+
+  ask:
+    - match:
+        command: gh
+        semantic:
+          area: pr
+          verb_in:
+            - create
+            - merge
+            - close
+            - reopen
+            - review
+            - ready
+            - update-branch
+      message: "PR mutation requires confirmation"
+
+  allow:
+    - match:
+        command: gh
+        semantic:
+          area: run
+          verb_in:
+            - view
+            - list
+            - watch
+```
+
+Gh semantic parsing statically reads commands shaped as
+`gh [global flags] <area> [verb] [args] [flags]`. Initial deep support covers
+`api`, `pr`, and `run`; other areas expose only `area` and `verb`.
+`-R`, `--repo`, and `--repo=...` set `repo`; no git remote is read.
+`--hostname` overrides `GH_HOST`. `--web` and `-w` set `web` to true.
+
+For `gh api`, the first positional after `api` is normalized as `endpoint` by
+adding a leading `/` when absent. `-X`, `--method`, and `--method=...` set an
+uppercased `method`; otherwise the parser defaults to `GET`. Body-like flags
+do not implicitly change the method in this parser: `-F` / `--field`,
+`-f` / `--raw-field`, and `--input` are represented through their own semantic
+fields. Header keys from `-H` / `--header` are lowercased.
+
+For `gh pr`, `verb` is the subcommand after `pr`. `view`, `list`, `diff`,
+`status`, and `checks` are typical read-only verbs. `create`, `merge`, `close`,
+`reopen`, `review`, `ready`, and `update-branch` usually mutate PR state.
+Merge strategy maps `--merge` / `-m` to `merge`, `--squash` / `-s` to
+`squash`, and `--rebase` / `-r` to `rebase`. `-f` is treated as `force` only
+for `gh pr checkout`.
+
+For `gh run`, `verb` is the subcommand after `run`. `view`, `list`, and
+`watch` are typical read-only verbs. `cancel`, `delete`, and `rerun` change
+GitHub Actions state.
+
 Unsupported semantic fields, unsupported value types, `semantic` without exact
 `command`, `command_in` with `semantic`, `subcommand` with `semantic`, command
 and semantic schema mismatches, and rewrite selectors with `semantic` are
-validation errors. Future commands such as `gh` must add their own
-command-specific semantic schema and verification.
+validation errors. Generic parser fallback never satisfies semantic match.
 
 For `permission.allow`, `pattern` and `patterns` fail closed to `ask` unless
 the command is safe for evaluation. Syntax parse errors, diagnostics, unknown

@@ -194,12 +194,12 @@ the raw command; use structured `match` rules for normal allow cases.
 Structured permission `match` supports command-specific semantic matching. The
 `match.command` value is the discriminator for the `semantic` schema; do not
 nest another command key under `semantic`; for example, use `semantic.service`,
-not `semantic.aws.service` or `semantic.kubectl.verb`. Today `command: git`,
-`command: aws`, and `command: kubectl` have semantic schemas. Semantic matching
-is best-effort static parsing from argv, is not attempted by the `GenericParser`
-fallback, and unsupported fields or value types fail during `verify`. Semantic
-matching is permission-only and cannot be used in rewrite selectors or with raw
-`pattern` / `patterns`.
+not `semantic.aws.service`, `semantic.kubectl.verb`, or `semantic.gh.area`.
+Today `command: git`, `command: aws`, `command: kubectl`, and `command: gh`
+have semantic schemas. Semantic matching is best-effort static parsing from
+argv, is not attempted by the `GenericParser` fallback, and unsupported fields
+or value types fail during `verify`. Semantic matching is permission-only and
+cannot be used in rewrite selectors or with raw `pattern` / `patterns`.
 
 ```yaml
 permission:
@@ -211,27 +211,6 @@ permission:
           force: true
       message: "force push is blocked"
 
-  allow:
-    - match:
-        command: git
-        semantic:
-          verb_in: [status, diff, log, show, branch]
-
-    - match:
-        command: aws
-        semantic:
-          service: sts
-          operation: get-caller-identity
-      message: "allow AWS identity check"
-
-  ask:
-    - match:
-        command: aws
-        semantic:
-          service_in: [iam, eks, ecs, lambda]
-      message: "AWS control-plane operation requires confirmation"
-
-  deny:
     - match:
         command: aws
         semantic:
@@ -253,6 +232,61 @@ permission:
           context: prod
           verb_in: [delete, apply, scale, rollout]
       message: "mutating production cluster is blocked"
+
+    - match:
+        command: gh
+        semantic:
+          area: api
+          method_in: [POST, PUT, PATCH, DELETE]
+          endpoint_prefix: /repos/
+      message: "GitHub API mutation requires confirmation"
+
+    - match:
+        command: gh
+        semantic:
+          area: pr
+          verb: merge
+          admin: true
+      message: "admin PR merge is blocked"
+
+  ask:
+    - match:
+        command: aws
+        semantic:
+          service_in: [iam, eks, ecs, lambda]
+      message: "AWS control-plane operation requires confirmation"
+
+    - match:
+        command: gh
+        semantic:
+          area: pr
+          verb_in: [create, merge, close, reopen, review, ready, update-branch]
+      message: "PR mutation requires confirmation"
+
+  allow:
+    - match:
+        command: git
+        semantic:
+          verb_in: [status, diff, log, show, branch]
+
+    - match:
+        command: aws
+        semantic:
+          service: sts
+          operation: get-caller-identity
+      message: "allow AWS identity check"
+
+    - match:
+        command: gh
+        semantic:
+          area: pr
+          verb_in: [view, list, diff, status, checks]
+
+    - match:
+        command: gh
+        semantic:
+          area: run
+          verb_in: [view, list, watch]
 ```
 
 Fail-closed means `allow` rules are ignored when parsing or shell-shape analysis
@@ -521,6 +555,29 @@ reads static argv only: it does not read manifest files or query Kubernetes.
 `--dry-run=client` set `dry_run: true`; `-f` / `--filename` set filename;
 `-l` / `--selector` set selector; `-c` / `--container` sets container.
 `rollout restart` is represented as `verb: rollout` and `subverb: restart`.
+
+For `command: gh`, `match.semantic` may use common fields `area`, `area_in`,
+`verb`, `verb_in`, `repo`, `repo_in`, `hostname`, `hostname_in`, `web`,
+`flags_contains`, and `flags_prefixes`. Initial deep support covers
+`gh api`, `gh pr`, and `gh run`; other `gh` areas expose only `area` and
+`verb`.
+
+`gh api` supports `method`, `method_in`, `endpoint`, `endpoint_prefix`,
+`endpoint_contains`, boolean fields `paginate`, `input`, `silent`,
+`include_headers`, and key-list fields `field_keys_contains`,
+`raw_field_keys_contains`, `header_keys_contains`. Endpoints are normalized to
+start with `/`. `-X` / `--method` is uppercased; without an explicit method the
+parser uses `GET` and records body/input flags separately.
+
+`gh pr` supports `pr_number`, `base`, `head`, booleans `draft`, `fill`,
+`force`, `admin`, `auto`, `delete_branch`, and `merge_strategy` /
+`merge_strategy_in`. `gh pr view/list/diff/status/checks` are typical read-only
+matches; `create`, `merge`, `close`, `reopen`, `review`, `ready`, and
+`update-branch` usually require `ask` or `deny`.
+
+`gh run` supports `run_id`, booleans `failed`, `debug`, `force`,
+`exit_status`, and `job`. `view`, `list`, and `watch` are typical read-only
+matches; `cancel`, `delete`, and `rerun` change GitHub Actions state.
 
 `semantic` requires exact `match.command`; `command_in` with `semantic` is
 invalid. `subcommand` with `semantic` is invalid because command-specific

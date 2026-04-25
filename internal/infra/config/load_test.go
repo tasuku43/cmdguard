@@ -230,6 +230,83 @@ test:
 	}
 }
 
+func TestLoadEffectiveRejectsInvalidGhSemanticYAML(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "unsupported semantic field for gh",
+			body: `permission:
+  deny:
+    - match:
+        command: gh
+        semantic:
+          service: sts
+      test:
+        deny:
+          - "gh api repos/OWNER/REPO"
+        pass:
+          - "git status"
+test:
+  - in: "gh api repos/OWNER/REPO"
+    decision: deny
+`,
+			want: "semantic contains fields not supported for command: gh",
+		},
+		{
+			name: "unsupported bool type",
+			body: `permission:
+  deny:
+    - match:
+        command: gh
+        semantic:
+          paginate: "true"
+test:
+  - in: "gh api --paginate repos/OWNER/REPO"
+    decision: deny
+`,
+			want: "cannot unmarshal !!str `true` into bool",
+		},
+		{
+			name: "nested semantic gh form",
+			body: `permission:
+  deny:
+    - match:
+        command: gh
+        semantic:
+          gh:
+            area: api
+test:
+  - in: "gh api repos/OWNER/REPO"
+    decision: deny
+`,
+			want: "field gh not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			userPath := filepath.Join(home, ".config", "cc-bash-proxy", "cc-bash-proxy.yml")
+			if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(userPath, []byte(tt.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			loaded := LoadEffective(home, "")
+			if len(loaded.Errors) == 0 {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(loaded.Errors[0].Error(), tt.want) {
+				t.Fatalf("error=%v, want substring %q", loaded.Errors[0], tt.want)
+			}
+		})
+	}
+}
+
 func TestLoadFileForEvalIfPresentSupportsStripCommandPath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cc-bash-proxy.yml")

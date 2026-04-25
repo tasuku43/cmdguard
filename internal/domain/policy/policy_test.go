@@ -455,6 +455,72 @@ func TestPermissionRuleMatchesKubectlSemantic(t *testing.T) {
 	}
 }
 
+func TestPermissionRuleMatchesGhSemantic(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		match   MatchSpec
+		want    bool
+	}{
+		{
+			name:    "api get repos",
+			command: "gh api repos/OWNER/REPO/pulls",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api", Method: "GET", EndpointPrefix: "/repos/"}},
+			want:    true,
+		},
+		{
+			name:    "pr squash merge",
+			command: "gh pr merge 123 --squash",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "pr", Verb: "merge", MergeStrategy: "squash"}},
+			want:    true,
+		},
+		{
+			name:    "run rerun failed",
+			command: "gh run rerun 123 --failed",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "run", Verb: "rerun", Failed: boolPtr(true)}},
+			want:    true,
+		},
+		{
+			name:    "wrong api method",
+			command: "gh api repos/OWNER/REPO/pulls",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api", Method: "DELETE"}},
+			want:    false,
+		},
+		{
+			name:    "api method does not match pr",
+			command: "gh pr view 123",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Method: "GET"}},
+			want:    false,
+		},
+		{
+			name:    "admin absent",
+			command: "gh pr merge 123 --squash",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "pr", Verb: "merge", Admin: boolPtr(true)}},
+			want:    false,
+		},
+		{
+			name:    "wrong run verb",
+			command: "gh run view 123",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "run", Verb: "delete"}},
+			want:    false,
+		},
+		{
+			name:    "generic fallback does not satisfy gh semantic",
+			command: "unknown api repos/OWNER/REPO/pulls",
+			match:   MatchSpec{Command: "unknown", Semantic: &SemanticMatchSpec{Area: "api"}},
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.match.MatchMatches(tt.command); got != tt.want {
+				t.Fatalf("MatchMatches(%q)=%v, want %v", tt.command, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMatchSpecAWSSemanticRequiresAWSParserData(t *testing.T) {
 	match := MatchSpec{Command: "aws", Semantic: &SemanticMatchSpec{Service: "sts"}}
 	cmd := commandpkg.Command{
@@ -465,6 +531,79 @@ func TestMatchSpecAWSSemanticRequiresAWSParserData(t *testing.T) {
 	}
 	if match.matches(cmd) {
 		t.Fatal("generic parser command satisfied aws semantic match")
+	}
+}
+
+func TestMatchSpecGhSemanticRequiresGhParserData(t *testing.T) {
+	match := MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api"}}
+	cmd := commandpkg.Command{
+		Raw:      "gh api repos/OWNER/REPO/pulls",
+		Program:  "gh",
+		RawWords: []string{"api", "repos/OWNER/REPO/pulls"},
+		Parser:   "generic",
+	}
+	if match.matches(cmd) {
+		t.Fatal("generic parser command satisfied gh semantic match")
+	}
+}
+
+func TestEvaluateGhSemanticPermissionOutcomes(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Deny: []PermissionRuleSpec{
+				{
+					Match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "pr", Verb: "merge", Admin: boolPtr(true)}},
+					Message: "admin PR merge is blocked",
+				},
+				{
+					Match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "run", VerbIn: []string{"delete", "cancel"}}},
+					Message: "workflow run deletion/cancellation is blocked",
+				},
+			},
+			Ask: []PermissionRuleSpec{
+				{
+					Match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "pr", VerbIn: []string{"create", "merge", "close", "reopen", "review", "ready", "update-branch"}}},
+					Message: "PR mutation requires confirmation",
+				},
+				{
+					Match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "run", Verb: "rerun"}},
+					Message: "workflow rerun requires confirmation",
+				},
+				{
+					Match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api", MethodIn: []string{"POST", "PUT", "PATCH", "DELETE"}}},
+					Message: "GitHub API mutation requires confirmation",
+				},
+			},
+			Allow: []PermissionRuleSpec{
+				{Match: MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "pr", VerbIn: []string{"view", "list", "diff", "status", "checks"}}}},
+				{Match: MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "run", VerbIn: []string{"view", "list", "watch"}}}},
+				{Match: MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api", Method: "GET", EndpointPrefix: "/repos/"}}},
+			},
+		},
+	}, Source{})
+
+	tests := []struct {
+		command string
+		want    string
+	}{
+		{command: "gh pr view 123", want: "allow"},
+		{command: "gh pr merge 123 --squash", want: "ask"},
+		{command: "gh pr merge 123 --admin", want: "deny"},
+		{command: "gh api repos/OWNER/REPO/pulls", want: "allow"},
+		{command: "gh api -X PATCH repos/OWNER/REPO/pulls/123", want: "ask"},
+		{command: "gh run delete 123", want: "deny"},
+		{command: "gh run rerun 123 --failed", want: "ask"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			got, err := Evaluate(p, tt.command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != tt.want {
+				t.Fatalf("Outcome=%q, want %q; decision=%+v", got.Outcome, tt.want, got)
+			}
+		})
 	}
 }
 
@@ -687,6 +826,36 @@ func TestEvaluateTraceIncludesKubectlSemanticInfo(t *testing.T) {
 		t.Fatalf("trace step missing kubectl semantic info: %+v", last)
 	}
 	for _, field := range []string{"verb", "resource_type", "namespace", "context"} {
+		if !containsString(last.SemanticFields, field) {
+			t.Fatalf("SemanticFields=%#v, want %q", last.SemanticFields, field)
+		}
+	}
+}
+
+func TestEvaluateTraceIncludesGhSemanticInfo(t *testing.T) {
+	p := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Allow: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api", Method: "GET", EndpointPrefix: "/repos/", Repo: "owner/repo"}},
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(p, "gh --repo owner/repo api repos/OWNER/REPO/pulls")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if len(got.Trace) == 0 {
+		t.Fatalf("trace empty")
+	}
+	last := got.Trace[len(got.Trace)-1]
+	if last.Parser != "gh" || last.SemanticParser != "gh" || !last.SemanticMatch {
+		t.Fatalf("trace step missing parser/semantic info: %+v", last)
+	}
+	if last.GhArea != "api" || last.GhRepo != "owner/repo" || last.GhMethod != "GET" || last.GhEndpoint != "/repos/OWNER/REPO/pulls" {
+		t.Fatalf("trace step missing gh semantic info: %+v", last)
+	}
+	for _, field := range []string{"area", "method", "endpoint_prefix", "repo"} {
 		if !containsString(last.SemanticFields, field) {
 			t.Fatalf("SemanticFields=%#v, want %q", last.SemanticFields, field)
 		}
@@ -1667,7 +1836,7 @@ func TestValidateSemanticMatchRules(t *testing.T) {
 			spec: PipelineSpec{Permission: PermissionSpec{Deny: []PermissionRuleSpec{{
 				Match: MatchSpec{Command: "ls", Semantic: &SemanticMatchSpec{Verb: "push"}},
 			}}}},
-			issue: "permission.deny[0].match.semantic is only supported for command: git, command: aws, or command: kubectl",
+			issue: "permission.deny[0].match.semantic is only supported for command: git, command: aws, command: kubectl, or command: gh",
 		},
 		{
 			name: "git command with aws semantic fields",
@@ -1705,9 +1874,30 @@ func TestValidateSemanticMatchRules(t *testing.T) {
 			issue: "permission.deny[0].match.subcommand cannot be used with semantic",
 		},
 		{
+			name: "git command with gh semantic fields",
+			spec: PipelineSpec{Permission: PermissionSpec{Deny: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "git", Semantic: &SemanticMatchSpec{Area: "api"}},
+			}}}},
+			issue: "permission.deny[0].match.semantic contains fields not supported for command: git",
+		},
+		{
+			name: "gh command with aws semantic fields",
+			spec: PipelineSpec{Permission: PermissionSpec{Deny: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Service: "sts"}},
+			}}}},
+			issue: "permission.deny[0].match.semantic contains fields not supported for command: gh",
+		},
+		{
+			name: "gh subcommand with semantic",
+			spec: PipelineSpec{Permission: PermissionSpec{Deny: []PermissionRuleSpec{{
+				Match: MatchSpec{Command: "gh", Subcommand: "api", Semantic: &SemanticMatchSpec{Area: "api"}},
+			}}}},
+			issue: "permission.deny[0].match.subcommand cannot be used with semantic",
+		},
+		{
 			name: "rewrite semantic",
 			spec: PipelineSpec{Rewrite: []RewriteStepSpec{{
-				Match:            MatchSpec{Command: "git", Semantic: &SemanticMatchSpec{Verb: "push"}},
+				Match:            MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api"}},
 				StripCommandPath: true,
 			}}},
 			issue: "rewrite[0].match.semantic is not supported; semantic match is currently permission-only",

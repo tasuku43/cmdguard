@@ -30,6 +30,7 @@ type Command struct {
 	Git              *GitSemantic
 	AWS              *AWSSemantic
 	Kubectl          *KubectlSemantic
+	Gh               *GhSemantic
 }
 
 type Option struct {
@@ -82,6 +83,39 @@ type KubectlSemantic struct {
 	Selectors     []string
 	Container     string
 	Flags         []string
+}
+
+type GhSemantic struct {
+	Area           string
+	Verb           string
+	Repo           string
+	Hostname       string
+	Web            bool
+	Method         string
+	Endpoint       string
+	Paginate       bool
+	Input          bool
+	Silent         bool
+	IncludeHeaders bool
+	FieldKeys      []string
+	RawFieldKeys   []string
+	HeaderKeys     []string
+	PRNumber       string
+	Base           string
+	Head           string
+	Draft          bool
+	Fill           bool
+	Force          bool
+	Admin          bool
+	Auto           bool
+	DeleteBranch   bool
+	MergeStrategy  string
+	RunID          string
+	Failed         bool
+	Job            string
+	Debug          bool
+	ExitStatus     bool
+	Flags          []string
 }
 
 func (c Command) HasOption(name string) bool {
