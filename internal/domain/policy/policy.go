@@ -1299,6 +1299,9 @@ func (s preparedPermissionSelector) matchesCommandValue(cmd commandpkg.Command) 
 }
 
 func (s preparedPermissionSelector) matchesPatterns(command string) bool {
+	if s.hasCommandSelector() {
+		return false
+	}
 	if !s.HasPatterns {
 		return s.matchesEnvOnly(command)
 	}

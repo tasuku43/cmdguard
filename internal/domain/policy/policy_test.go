@@ -2150,6 +2150,13 @@ func TestEvaluatePermissionPredicateCombinations(t *testing.T) {
 			want:    "allow",
 		},
 		{
+			name:    "command env does not match different command",
+			rule:    PermissionRuleSpec{Command: PermissionCommandSpec{Name: "aws"}, Env: PermissionEnvSpec{Missing: []string{"AWS_PROFILE"}}},
+			effect:  "deny",
+			command: "git rebase main",
+			want:    "abstain",
+		},
+		{
 			name:    "command semantic env allow",
 			rule:    PermissionRuleSpec{Command: PermissionCommandSpec{Name: "aws", Semantic: &SemanticMatchSpec{Service: "sts", Operation: "get-caller-identity"}}, Env: PermissionEnvSpec{Requires: []string{"AWS_PROFILE"}}},
 			effect:  "allow",
@@ -2190,6 +2197,35 @@ func TestEvaluatePermissionPredicateCombinations(t *testing.T) {
 				t.Fatalf("Outcome=%q want %q decision=%+v", got.Outcome, tt.want, got)
 			}
 		})
+	}
+}
+
+func TestEvaluatePermissionCommandEnvDenyDoesNotOverrideDifferentCommandAsk(t *testing.T) {
+	pipeline := NewPipeline(PipelineSpec{
+		Permission: PermissionSpec{
+			Deny: []PermissionRuleSpec{{
+				Name:    "aws without AWS_PROFILE env",
+				Command: PermissionCommandSpec{Name: "aws"},
+				Env:     PermissionEnvSpec{Missing: []string{"AWS_PROFILE"}},
+				Message: "aws commands must start with AWS_PROFILE=<profile>",
+			}},
+			Ask: []PermissionRuleSpec{{
+				Name:    "git rebase ask",
+				Command: PermissionCommandSpec{Name: "git", Semantic: &SemanticMatchSpec{Verb: "rebase"}},
+				Message: "git rebase rewrites history",
+			}},
+		},
+	}, Source{})
+
+	got, err := Evaluate(pipeline, "git rebase main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Outcome != "ask" {
+		t.Fatalf("Outcome = %q, want ask; decision=%+v", got.Outcome, got)
+	}
+	if got.Message != "git rebase rewrites history" {
+		t.Fatalf("Message = %q, want git rebase message; decision=%+v", got.Message, got)
 	}
 }
 
