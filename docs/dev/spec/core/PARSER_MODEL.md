@@ -79,10 +79,13 @@ A CLI-specific parser adds meaning for one program family.
 For example, `GitParser` understands supported git global options, identifies
 the git action path, and separates git command options from positional args.
 `GhParser` identifies GitHub CLI areas and verbs, with deeper static semantics
-for `gh api`, `gh pr`, and `gh run`. `HelmfileParser` identifies the
-helmfile verb and static CLI targets such as environment, state files,
+for `gh api`, `gh pr`, `gh issue`, `gh repo`, `gh release`, `gh secret`, `gh
+search`, `gh workflow`, `gh auth`, and `gh run`. `HelmfileParser` identifies
+the helmfile verb and static CLI targets such as environment, state files,
 namespace, kube context, selectors, and safety flags without reading
-`helmfile.yaml`.
+`helmfile.yaml`. `ArgoCDParser` identifies Argo CD app action paths and static
+CLI targets such as app name, project, and revision without contacting the
+Argo CD API.
 
 Adding a new parser must not change the meaning of existing parser output or
 existing raw-word matchers. It may only improve semantic precision for its own

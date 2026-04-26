@@ -92,9 +92,6 @@ func TestHelpSemanticListsSupportedCommands(t *testing.T) {
 			t.Fatalf("help semantic missing %q:\n%s", want, stdout)
 		}
 	}
-	if strings.Contains(stdout, "argocd") {
-		t.Fatalf("help semantic listed unimplemented argocd:\n%s", stdout)
-	}
 }
 
 func TestHelpSemanticGitShowsSchema(t *testing.T) {

@@ -34,6 +34,30 @@ func (GhParser) Parse(base Command) (Command, bool) {
 			if consumed && !strings.Contains(word, "=") {
 				i++
 			}
+		case ghOptionWithValue(word, "-o", "--org"):
+			value, consumed := ghOptionValue(word, "--org", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: ghOptionName(word, "-o", "--org"), Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
+		case ghOptionWithValue(word, "-e", "--env"):
+			value, consumed := ghOptionValue(word, "--env", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: ghOptionName(word, "-e", "--env"), Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
+		case ghOptionWithValue(word, "", "--env-name"):
+			value, consumed := ghOptionValue(word, "--env-name", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: "--env-name", Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
+		case ghOptionWithValue(word, "", "--ref"):
+			value, consumed := ghOptionValue(word, "--ref", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: "--ref", Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
 		case ghOptionWithValue(word, "-X", "--method"):
 			value, consumed := ghOptionValue(word, "--method", base.RawWords, i)
 			cmd.Options = append(cmd.Options, Option{Name: ghOptionName(word, "-X", "--method"), Value: value, HasValue: consumed, Position: i})
@@ -82,9 +106,40 @@ func (GhParser) Parse(base Command) (Command, bool) {
 			if consumed && !strings.Contains(word, "=") {
 				i++
 			}
+		case ghOptionWithValue(word, "", "--state"):
+			value, consumed := ghOptionValue(word, "--state", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: "--state", Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
+		case ghOptionWithValue(word, "-l", "--label"):
+			value, consumed := ghOptionValue(word, "--label", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: ghOptionName(word, "-l", "--label"), Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
+		case ghOptionWithValue(word, "-a", "--assignee"):
+			value, consumed := ghOptionValue(word, "--assignee", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: ghOptionName(word, "-a", "--assignee"), Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
+		case ghOptionWithValue(word, "-t", "--title"):
+			value, consumed := ghOptionValue(word, "--title", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: ghOptionName(word, "-t", "--title"), Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
+		case ghOptionWithValue(word, "-b", "--body"):
+			value, consumed := ghOptionValue(word, "--body", base.RawWords, i)
+			cmd.Options = append(cmd.Options, Option{Name: ghOptionName(word, "-b", "--body"), Value: value, HasValue: consumed, Position: i})
+			if consumed && !strings.Contains(word, "=") {
+				i++
+			}
 		case word == "-w" || word == "--web" ||
 			word == "--paginate" || word == "--silent" || word == "-i" || word == "--include" ||
 			word == "--draft" || word == "--fill" || word == "--force" ||
+			word == "--prerelease" || word == "--latest" ||
 			word == "--merge" || word == "-m" || word == "--squash" || word == "-s" || word == "--rebase" || word == "-r" ||
 			word == "--delete-branch" || word == "--admin" || word == "--auto" ||
 			word == "--failed" || word == "--debug" || word == "--exit-status":
@@ -166,6 +221,9 @@ func buildGhSemantic(env map[string]string, actionPath []string, args []string, 
 	if hostname := lastGhOptionValue(options, "--hostname"); hostname != "" {
 		semantic.Hostname = hostname
 	}
+	semantic.Org = lastGhOptionValue(options, "-o", "--org")
+	semantic.EnvName = lastGhOptionValue(options, "-e", "--env", "--env-name")
+	semantic.Ref = lastGhOptionValue(options, "--ref")
 	semantic.Web = ghHasAnyOption(options, "-w", "--web")
 
 	switch semantic.Area {
@@ -173,6 +231,20 @@ func buildGhSemantic(env map[string]string, actionPath []string, args []string, 
 		fillGhAPISemantic(semantic, args, options)
 	case "pr":
 		fillGhPRSemantic(semantic, args, options)
+	case "issue":
+		fillGhIssueSemantic(semantic, args, options)
+	case "repo":
+		fillGhRepoSemantic(semantic, args)
+	case "release":
+		fillGhReleaseSemantic(semantic, args, options)
+	case "secret":
+		fillGhSecretSemantic(semantic, args)
+	case "search":
+		fillGhSearchSemantic(semantic, args)
+	case "workflow":
+		fillGhWorkflowSemantic(semantic, args)
+	case "auth":
+		fillGhAuthSemantic(semantic, args)
 	case "run":
 		fillGhRunSemantic(semantic, args, options)
 	}
@@ -229,6 +301,58 @@ func fillGhPRSemantic(semantic *GhSemantic, args []string, options []Option) {
 		semantic.MergeStrategy = "squash"
 	case ghHasAnyOption(options, "--rebase", "-r"):
 		semantic.MergeStrategy = "rebase"
+	}
+}
+
+func fillGhIssueSemantic(semantic *GhSemantic, args []string, options []Option) {
+	if len(args) > 0 {
+		semantic.IssueNumber = args[0]
+	}
+	semantic.State = lastGhOptionValue(options, "--state")
+	semantic.Labels = append(semantic.Labels, ghOptionValues(options, "-l", "--label")...)
+	semantic.Assignees = append(semantic.Assignees, ghOptionValues(options, "-a", "--assignee")...)
+	semantic.Title = lastGhOptionValue(options, "-t", "--title")
+	semantic.Body = lastGhOptionValue(options, "-b", "--body")
+}
+
+func fillGhRepoSemantic(semantic *GhSemantic, args []string) {
+	if semantic.Repo == "" && len(args) > 0 {
+		semantic.Repo = args[0]
+	}
+}
+
+func fillGhReleaseSemantic(semantic *GhSemantic, args []string, options []Option) {
+	if len(args) > 0 {
+		semantic.Tag = args[0]
+	}
+	semantic.Prerelease = ghHasAnyOption(options, "--prerelease")
+	semantic.Draft = ghHasAnyOption(options, "--draft")
+	semantic.Latest = ghHasAnyOption(options, "--latest")
+}
+
+func fillGhSecretSemantic(semantic *GhSemantic, args []string) {
+	if len(args) > 0 {
+		semantic.SecretName = args[0]
+	}
+}
+
+func fillGhSearchSemantic(semantic *GhSemantic, args []string) {
+	semantic.SearchType = semantic.Verb
+	if len(args) > 0 {
+		semantic.Query = strings.Join(args, " ")
+	}
+}
+
+func fillGhWorkflowSemantic(semantic *GhSemantic, args []string) {
+	if len(args) > 0 {
+		semantic.WorkflowName = args[0]
+		semantic.WorkflowID = args[0]
+	}
+}
+
+func fillGhAuthSemantic(semantic *GhSemantic, args []string) {
+	if semantic.Verb == "" && len(args) > 0 {
+		semantic.Verb = args[0]
 	}
 }
 

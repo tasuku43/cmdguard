@@ -32,6 +32,7 @@ type Command struct {
 	Kubectl          *KubectlSemantic
 	Gh               *GhSemantic
 	Helmfile         *HelmfileSemantic
+	ArgoCD           *ArgoCDSemantic
 }
 
 type Option struct {
@@ -93,6 +94,8 @@ type GhSemantic struct {
 	Verb           string
 	Repo           string
 	Hostname       string
+	Org            string
+	EnvName        string
 	Web            bool
 	Method         string
 	Endpoint       string
@@ -104,9 +107,24 @@ type GhSemantic struct {
 	RawFieldKeys   []string
 	HeaderKeys     []string
 	PRNumber       string
+	IssueNumber    string
+	SecretName     string
+	Tag            string
+	WorkflowName   string
+	WorkflowID     string
+	SearchType     string
+	Query          string
 	Base           string
 	Head           string
+	Ref            string
+	State          string
+	Labels         []string
+	Assignees      []string
+	Title          string
+	Body           string
 	Draft          bool
+	Prerelease     bool
+	Latest         bool
 	Fill           bool
 	Force          bool
 	Admin          bool
@@ -143,6 +161,14 @@ type HelmfileSemantic struct {
 	StateValuesSetKeys       []string
 	StateValuesSetStringKeys []string
 	Flags                    []string
+}
+
+type ArgoCDSemantic struct {
+	Verb     string
+	AppName  string
+	Project  string
+	Revision string
+	Flags    []string
 }
 
 func (c Command) HasOption(name string) bool {

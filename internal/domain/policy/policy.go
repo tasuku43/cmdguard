@@ -152,6 +152,15 @@ type SemanticMatchSpec struct {
 	AreaIn                           []string `yaml:"area_in" json:"area_in,omitempty"`
 	Repo                             string   `yaml:"repo" json:"repo,omitempty"`
 	RepoIn                           []string `yaml:"repo_in" json:"repo_in,omitempty"`
+	Org                              string   `yaml:"org" json:"org,omitempty"`
+	OrgIn                            []string `yaml:"org_in" json:"org_in,omitempty"`
+	EnvName                          string   `yaml:"env" json:"env,omitempty"`
+	EnvNameIn                        []string `yaml:"env_in" json:"env_in,omitempty"`
+	AppName                          string   `yaml:"app_name" json:"app_name,omitempty"`
+	AppNameIn                        []string `yaml:"app_name_in" json:"app_name_in,omitempty"`
+	Project                          string   `yaml:"project" json:"project,omitempty"`
+	ProjectIn                        []string `yaml:"project_in" json:"project_in,omitempty"`
+	Revision                         string   `yaml:"revision" json:"revision,omitempty"`
 	Hostname                         string   `yaml:"hostname" json:"hostname,omitempty"`
 	HostnameIn                       []string `yaml:"hostname_in" json:"hostname_in,omitempty"`
 	Web                              *bool    `yaml:"web" json:"web,omitempty"`
@@ -168,9 +177,26 @@ type SemanticMatchSpec struct {
 	RawFieldKeysContains             []string `yaml:"raw_field_keys_contains" json:"raw_field_keys_contains,omitempty"`
 	HeaderKeysContains               []string `yaml:"header_keys_contains" json:"header_keys_contains,omitempty"`
 	PRNumber                         string   `yaml:"pr_number" json:"pr_number,omitempty"`
+	IssueNumber                      string   `yaml:"issue_number" json:"issue_number,omitempty"`
+	SecretName                       string   `yaml:"secret_name" json:"secret_name,omitempty"`
+	SecretNameIn                     []string `yaml:"secret_name_in" json:"secret_name_in,omitempty"`
+	Tag                              string   `yaml:"tag" json:"tag,omitempty"`
+	WorkflowName                     string   `yaml:"workflow_name" json:"workflow_name,omitempty"`
+	WorkflowID                       string   `yaml:"workflow_id" json:"workflow_id,omitempty"`
+	SearchType                       string   `yaml:"search_type" json:"search_type,omitempty"`
+	SearchTypeIn                     []string `yaml:"search_type_in" json:"search_type_in,omitempty"`
+	QueryContains                    string   `yaml:"query_contains" json:"query_contains,omitempty"`
 	Base                             string   `yaml:"base" json:"base,omitempty"`
 	Head                             string   `yaml:"head" json:"head,omitempty"`
+	State                            string   `yaml:"state" json:"state,omitempty"`
+	StateIn                          []string `yaml:"state_in" json:"state_in,omitempty"`
+	LabelIn                          []string `yaml:"label_in" json:"label_in,omitempty"`
+	AssigneeIn                       []string `yaml:"assignee_in" json:"assignee_in,omitempty"`
+	TitleContains                    string   `yaml:"title_contains" json:"title_contains,omitempty"`
+	BodyContains                     string   `yaml:"body_contains" json:"body_contains,omitempty"`
 	Draft                            *bool    `yaml:"draft" json:"draft,omitempty"`
+	Prerelease                       *bool    `yaml:"prerelease" json:"prerelease,omitempty"`
+	Latest                           *bool    `yaml:"latest" json:"latest,omitempty"`
 	Fill                             *bool    `yaml:"fill" json:"fill,omitempty"`
 	Admin                            *bool    `yaml:"admin" json:"admin,omitempty"`
 	Auto                             *bool    `yaml:"auto" json:"auto,omitempty"`
@@ -252,6 +278,10 @@ type TraceStep struct {
 	HelmfileKubeContext string   `json:"helmfile_kube_context,omitempty"`
 	HelmfileSelectors   []string `json:"helmfile_selectors,omitempty"`
 	HelmfileInteractive *bool    `json:"helmfile_interactive,omitempty"`
+	ArgoCDVerb          string   `json:"argocd_verb,omitempty"`
+	ArgoCDAppName       string   `json:"argocd_app_name,omitempty"`
+	ArgoCDProject       string   `json:"argocd_project,omitempty"`
+	ArgoCDRevision      string   `json:"argocd_revision,omitempty"`
 	FromShape           string   `json:"from_shape,omitempty"`
 	FromShapeFlags      []string `json:"from_shape_flags,omitempty"`
 	FromSafe            *bool    `json:"from_safe,omitempty"`
@@ -578,6 +608,12 @@ func permissionTraceStepForCommand(effect string, ruleType string, rule Permissi
 		step.HelmfileSelectors = append([]string(nil), cmd.Helmfile.Selectors...)
 		step.HelmfileInteractive = boolPtr(cmd.Helmfile.Interactive)
 	}
+	if cmd.ArgoCD != nil {
+		step.ArgoCDVerb = cmd.ArgoCD.Verb
+		step.ArgoCDAppName = cmd.ArgoCD.AppName
+		step.ArgoCDProject = cmd.ArgoCD.Project
+		step.ArgoCDRevision = cmd.ArgoCD.Revision
+	}
 	if rule.Command.Semantic != nil {
 		step.SemanticMatch = true
 		step.SemanticFields = rule.Command.Semantic.fieldsUsed()
@@ -851,6 +887,10 @@ func compositionTrace(plan commandpkg.CommandPlan, decisions []commandDecision, 
 			HelmfileKubeContext: helmfileTraceKubeContext(cmd),
 			HelmfileSelectors:   helmfileTraceSelectors(cmd),
 			HelmfileInteractive: helmfileTraceInteractive(cmd),
+			ArgoCDVerb:          argocdTraceVerb(cmd),
+			ArgoCDAppName:       argocdTraceAppName(cmd),
+			ArgoCDProject:       argocdTraceProject(cmd),
+			ArgoCDRevision:      argocdTraceRevision(cmd),
 			Program:             cmd.Program,
 			ActionPath:          append([]string(nil), cmd.ActionPath...),
 			Source:              sourcePtr(commandDecision.Rule.Source),
@@ -1031,6 +1071,34 @@ func helmfileTraceInteractive(cmd commandpkg.Command) *bool {
 	return boolPtr(cmd.Helmfile.Interactive)
 }
 
+func argocdTraceVerb(cmd commandpkg.Command) string {
+	if cmd.ArgoCD == nil {
+		return ""
+	}
+	return cmd.ArgoCD.Verb
+}
+
+func argocdTraceAppName(cmd commandpkg.Command) string {
+	if cmd.ArgoCD == nil {
+		return ""
+	}
+	return cmd.ArgoCD.AppName
+}
+
+func argocdTraceProject(cmd commandpkg.Command) string {
+	if cmd.ArgoCD == nil {
+		return ""
+	}
+	return cmd.ArgoCD.Project
+}
+
+func argocdTraceRevision(cmd commandpkg.Command) string {
+	if cmd.ArgoCD == nil {
+		return ""
+	}
+	return cmd.ArgoCD.Revision
+}
+
 func firstPreparedCommandMatch(rules []preparedPermissionRule, cmd commandpkg.Command) (PermissionRuleSpec, bool) {
 	for _, rule := range rules {
 		if rule.Selector.matchesCommandValue(cmd) {
@@ -1148,6 +1216,8 @@ func permissionSemanticMatches(command string, semantic SemanticMatchSpec, cmd c
 		return semantic.matchesGh(cmd)
 	case "helmfile":
 		return semantic.matchesHelmfile(cmd)
+	case "argocd":
+		return semantic.matchesArgoCD(cmd)
 	default:
 		return false
 	}
@@ -1441,6 +1511,10 @@ func (m MatchSpec) matches(cmd commandpkg.Command) bool {
 			if !m.Semantic.matchesHelmfile(cmd) {
 				return false
 			}
+		case "argocd":
+			if !m.Semantic.matchesArgoCD(cmd) {
+				return false
+			}
 		default:
 			return false
 		}
@@ -1695,6 +1769,18 @@ func (s SemanticMatchSpec) matchesGh(cmd commandpkg.Command) bool {
 	if len(s.RepoIn) > 0 && !containsString(s.RepoIn, gh.Repo) {
 		return false
 	}
+	if s.Org != "" && gh.Org != s.Org {
+		return false
+	}
+	if len(s.OrgIn) > 0 && !containsString(s.OrgIn, gh.Org) {
+		return false
+	}
+	if s.EnvName != "" && gh.EnvName != s.EnvName {
+		return false
+	}
+	if len(s.EnvNameIn) > 0 && !containsString(s.EnvNameIn, gh.EnvName) {
+		return false
+	}
 	if s.Hostname != "" && gh.Hostname != s.Hostname {
 		return false
 	}
@@ -1751,13 +1837,70 @@ func (s SemanticMatchSpec) matchesGh(cmd commandpkg.Command) bool {
 	if s.PRNumber != "" && gh.PRNumber != s.PRNumber {
 		return false
 	}
+	if s.IssueNumber != "" && gh.IssueNumber != s.IssueNumber {
+		return false
+	}
+	if s.SecretName != "" && gh.SecretName != s.SecretName {
+		return false
+	}
+	if len(s.SecretNameIn) > 0 && !containsString(s.SecretNameIn, gh.SecretName) {
+		return false
+	}
+	if s.Tag != "" && gh.Tag != s.Tag {
+		return false
+	}
+	if s.WorkflowName != "" && gh.WorkflowName != s.WorkflowName {
+		return false
+	}
+	if s.WorkflowID != "" && gh.WorkflowID != s.WorkflowID {
+		return false
+	}
+	if s.SearchType != "" && gh.SearchType != s.SearchType {
+		return false
+	}
+	if len(s.SearchTypeIn) > 0 && !containsString(s.SearchTypeIn, gh.SearchType) {
+		return false
+	}
+	if s.QueryContains != "" && !strings.Contains(gh.Query, s.QueryContains) {
+		return false
+	}
 	if s.Base != "" && gh.Base != s.Base {
 		return false
 	}
 	if s.Head != "" && gh.Head != s.Head {
 		return false
 	}
+	if s.Ref != "" && gh.Ref != s.Ref {
+		return false
+	}
+	if len(s.RefIn) > 0 && !containsString(s.RefIn, gh.Ref) {
+		return false
+	}
+	if s.State != "" && gh.State != s.State {
+		return false
+	}
+	if len(s.StateIn) > 0 && !containsString(s.StateIn, gh.State) {
+		return false
+	}
+	if len(s.LabelIn) > 0 && !containsAnyString(gh.Labels, s.LabelIn) {
+		return false
+	}
+	if len(s.AssigneeIn) > 0 && !containsAnyString(gh.Assignees, s.AssigneeIn) {
+		return false
+	}
+	if s.TitleContains != "" && !strings.Contains(gh.Title, s.TitleContains) {
+		return false
+	}
+	if s.BodyContains != "" && !strings.Contains(gh.Body, s.BodyContains) {
+		return false
+	}
 	if s.Draft != nil && gh.Draft != *s.Draft {
+		return false
+	}
+	if s.Prerelease != nil && gh.Prerelease != *s.Prerelease {
+		return false
+	}
+	if s.Latest != nil && gh.Latest != *s.Latest {
 		return false
 	}
 	if s.Fill != nil && gh.Fill != *s.Fill {
@@ -1803,6 +1946,45 @@ func (s SemanticMatchSpec) matchesGh(cmd commandpkg.Command) bool {
 	}
 	for _, prefix := range s.FlagsPrefixes {
 		if !containsPrefix(gh.Flags, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s SemanticMatchSpec) matchesArgoCD(cmd commandpkg.Command) bool {
+	if cmd.SemanticParser != "argocd" || cmd.ArgoCD == nil {
+		return false
+	}
+	a := cmd.ArgoCD
+	if s.Verb != "" && a.Verb != s.Verb {
+		return false
+	}
+	if len(s.VerbIn) > 0 && !containsString(s.VerbIn, a.Verb) {
+		return false
+	}
+	if s.AppName != "" && a.AppName != s.AppName {
+		return false
+	}
+	if len(s.AppNameIn) > 0 && !containsString(s.AppNameIn, a.AppName) {
+		return false
+	}
+	if s.Project != "" && a.Project != s.Project {
+		return false
+	}
+	if len(s.ProjectIn) > 0 && !containsString(s.ProjectIn, a.Project) {
+		return false
+	}
+	if s.Revision != "" && a.Revision != s.Revision {
+		return false
+	}
+	for _, flag := range s.FlagsContains {
+		if !containsString(a.Flags, flag) {
+			return false
+		}
+	}
+	for _, prefix := range s.FlagsPrefixes {
+		if !containsPrefix(a.Flags, prefix) {
 			return false
 		}
 	}
@@ -2182,6 +2364,33 @@ func (s SemanticMatchSpec) fieldsUsed() []string {
 	if len(s.RepoIn) > 0 {
 		fields = append(fields, "repo_in")
 	}
+	if s.Org != "" {
+		fields = append(fields, "org")
+	}
+	if len(s.OrgIn) > 0 {
+		fields = append(fields, "org_in")
+	}
+	if s.EnvName != "" {
+		fields = append(fields, "env")
+	}
+	if len(s.EnvNameIn) > 0 {
+		fields = append(fields, "env_in")
+	}
+	if s.AppName != "" {
+		fields = append(fields, "app_name")
+	}
+	if len(s.AppNameIn) > 0 {
+		fields = append(fields, "app_name_in")
+	}
+	if s.Project != "" {
+		fields = append(fields, "project")
+	}
+	if len(s.ProjectIn) > 0 {
+		fields = append(fields, "project_in")
+	}
+	if s.Revision != "" {
+		fields = append(fields, "revision")
+	}
 	if s.Hostname != "" {
 		fields = append(fields, "hostname")
 	}
@@ -2230,14 +2439,65 @@ func (s SemanticMatchSpec) fieldsUsed() []string {
 	if s.PRNumber != "" {
 		fields = append(fields, "pr_number")
 	}
+	if s.IssueNumber != "" {
+		fields = append(fields, "issue_number")
+	}
+	if s.SecretName != "" {
+		fields = append(fields, "secret_name")
+	}
+	if len(s.SecretNameIn) > 0 {
+		fields = append(fields, "secret_name_in")
+	}
+	if s.Tag != "" {
+		fields = append(fields, "tag")
+	}
+	if s.WorkflowName != "" {
+		fields = append(fields, "workflow_name")
+	}
+	if s.WorkflowID != "" {
+		fields = append(fields, "workflow_id")
+	}
+	if s.SearchType != "" {
+		fields = append(fields, "search_type")
+	}
+	if len(s.SearchTypeIn) > 0 {
+		fields = append(fields, "search_type_in")
+	}
+	if s.QueryContains != "" {
+		fields = append(fields, "query_contains")
+	}
 	if s.Base != "" {
 		fields = append(fields, "base")
 	}
 	if s.Head != "" {
 		fields = append(fields, "head")
 	}
+	if s.State != "" {
+		fields = append(fields, "state")
+	}
+	if len(s.StateIn) > 0 {
+		fields = append(fields, "state_in")
+	}
+	if len(s.LabelIn) > 0 {
+		fields = append(fields, "label_in")
+	}
+	if len(s.AssigneeIn) > 0 {
+		fields = append(fields, "assignee_in")
+	}
+	if s.TitleContains != "" {
+		fields = append(fields, "title_contains")
+	}
+	if s.BodyContains != "" {
+		fields = append(fields, "body_contains")
+	}
 	if s.Draft != nil {
 		fields = append(fields, "draft")
+	}
+	if s.Prerelease != nil {
+		fields = append(fields, "prerelease")
+	}
+	if s.Latest != nil {
+		fields = append(fields, "latest")
 	}
 	if s.Fill != nil {
 		fields = append(fields, "fill")
@@ -2391,6 +2651,8 @@ func ValidatePermissionCommandSpec(prefix string, command PermissionCommandSpec)
 			issues = append(issues, ValidateGhSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
 		case "helmfile":
 			issues = append(issues, ValidateHelmfileSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
+		case "argocd":
+			issues = append(issues, ValidateArgoCDSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
 		}
 	}
 	return issues
@@ -2491,6 +2753,8 @@ func validateMatchSpec(prefix string, match MatchSpec, allowSemantic bool) []str
 			issues = append(issues, ValidateGhSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
 		case "helmfile":
 			issues = append(issues, ValidateHelmfileSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
+		case "argocd":
+			issues = append(issues, ValidateArgoCDSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
 		case "":
 		}
 	}
@@ -2633,13 +2897,26 @@ func ValidateGhSemanticMatchSpec(prefix string, semantic SemanticMatchSpec) []st
 		"area":            semantic.Area,
 		"verb":            semantic.Verb,
 		"repo":            semantic.Repo,
+		"org":             semantic.Org,
+		"env":             semantic.EnvName,
 		"hostname":        semantic.Hostname,
 		"method":          semantic.Method,
 		"endpoint":        semantic.Endpoint,
 		"endpoint_prefix": semantic.EndpointPrefix,
 		"pr_number":       semantic.PRNumber,
+		"issue_number":    semantic.IssueNumber,
+		"secret_name":     semantic.SecretName,
+		"tag":             semantic.Tag,
+		"workflow_name":   semantic.WorkflowName,
+		"workflow_id":     semantic.WorkflowID,
+		"search_type":     semantic.SearchType,
+		"query_contains":  semantic.QueryContains,
 		"base":            semantic.Base,
 		"head":            semantic.Head,
+		"ref":             semantic.Ref,
+		"state":           semantic.State,
+		"title_contains":  semantic.TitleContains,
+		"body_contains":   semantic.BodyContains,
 		"merge_strategy":  semantic.MergeStrategy,
 		"run_id":          semantic.RunID,
 		"job":             semantic.Job,
@@ -2651,13 +2928,44 @@ func ValidateGhSemanticMatchSpec(prefix string, semantic SemanticMatchSpec) []st
 	issues = append(issues, validateNonEmptyStrings(prefix+".area_in", semantic.AreaIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".verb_in", semantic.VerbIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".repo_in", semantic.RepoIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".org_in", semantic.OrgIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".env_in", semantic.EnvNameIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".hostname_in", semantic.HostnameIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".method_in", semantic.MethodIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".endpoint_contains", semantic.EndpointContains)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".ref_in", semantic.RefIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".state_in", semantic.StateIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".label_in", semantic.LabelIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".assignee_in", semantic.AssigneeIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".secret_name_in", semantic.SecretNameIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".search_type_in", semantic.SearchTypeIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".field_keys_contains", semantic.FieldKeysContains)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".raw_field_keys_contains", semantic.RawFieldKeysContains)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".header_keys_contains", semantic.HeaderKeysContains)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".merge_strategy_in", semantic.MergeStrategyIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".flags_contains", semantic.FlagsContains)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".flags_prefixes", semantic.FlagsPrefixes)...)
+	return issues
+}
+
+func ValidateArgoCDSemanticMatchSpec(prefix string, semantic SemanticMatchSpec) []string {
+	var issues []string
+	if IsZeroSemanticMatchSpec(semantic) {
+		issues = append(issues, prefix+" must not be empty")
+	}
+	for name, value := range map[string]string{
+		"verb":     semantic.Verb,
+		"app_name": semantic.AppName,
+		"project":  semantic.Project,
+		"revision": semantic.Revision,
+	} {
+		if strings.TrimSpace(value) == "" && value != "" {
+			issues = append(issues, prefix+"."+name+" must be non-empty")
+		}
+	}
+	issues = append(issues, validateNonEmptyStrings(prefix+".verb_in", semantic.VerbIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".app_name_in", semantic.AppNameIn)...)
+	issues = append(issues, validateNonEmptyStrings(prefix+".project_in", semantic.ProjectIn)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".flags_contains", semantic.FlagsContains)...)
 	issues = append(issues, validateNonEmptyStrings(prefix+".flags_prefixes", semantic.FlagsPrefixes)...)
 	return issues
@@ -2797,7 +3105,7 @@ func IsZeroMatchSpec(match MatchSpec) bool {
 }
 
 func IsZeroSemanticMatchSpec(semantic SemanticMatchSpec) bool {
-	return !hasGitSemanticFields(semantic) && !hasAWSSemanticFields(semantic) && !hasKubectlSemanticFields(semantic) && !hasGhSemanticFields(semantic) && !hasHelmfileSemanticFields(semantic) &&
+	return !hasGitSemanticFields(semantic) && !hasAWSSemanticFields(semantic) && !hasKubectlSemanticFields(semantic) && !hasGhSemanticFields(semantic) && !hasHelmfileSemanticFields(semantic) && !hasArgoCDSemanticFields(semantic) &&
 		len(semantic.FlagsContains) == 0 &&
 		len(semantic.FlagsPrefixes) == 0
 }
@@ -2918,10 +3226,31 @@ func hasGhOnlySemanticFields(semantic SemanticMatchSpec) bool {
 		len(semantic.FieldKeysContains) > 0 ||
 		len(semantic.RawFieldKeysContains) > 0 ||
 		len(semantic.HeaderKeysContains) > 0 ||
+		semantic.Org != "" ||
+		len(semantic.OrgIn) > 0 ||
+		semantic.EnvName != "" ||
+		len(semantic.EnvNameIn) > 0 ||
 		semantic.PRNumber != "" ||
+		semantic.IssueNumber != "" ||
+		semantic.SecretName != "" ||
+		len(semantic.SecretNameIn) > 0 ||
+		semantic.Tag != "" ||
+		semantic.WorkflowName != "" ||
+		semantic.WorkflowID != "" ||
+		semantic.SearchType != "" ||
+		len(semantic.SearchTypeIn) > 0 ||
+		semantic.QueryContains != "" ||
 		semantic.Base != "" ||
 		semantic.Head != "" ||
+		semantic.State != "" ||
+		len(semantic.StateIn) > 0 ||
+		len(semantic.LabelIn) > 0 ||
+		len(semantic.AssigneeIn) > 0 ||
+		semantic.TitleContains != "" ||
+		semantic.BodyContains != "" ||
 		semantic.Draft != nil ||
+		semantic.Prerelease != nil ||
+		semantic.Latest != nil ||
 		semantic.Fill != nil ||
 		semantic.Admin != nil ||
 		semantic.Auto != nil ||
@@ -2989,6 +3318,16 @@ func hasHelmfileOnlySemanticFields(semantic SemanticMatchSpec) bool {
 		len(semantic.StateValuesFileIn) > 0 ||
 		len(semantic.StateValuesSetKeysContains) > 0 ||
 		len(semantic.StateValuesSetStringKeysContains) > 0
+}
+
+func hasArgoCDSemanticFields(semantic SemanticMatchSpec) bool {
+	return semantic.Verb != "" ||
+		len(semantic.VerbIn) > 0 ||
+		semantic.AppName != "" ||
+		len(semantic.AppNameIn) > 0 ||
+		semantic.Project != "" ||
+		len(semantic.ProjectIn) > 0 ||
+		semantic.Revision != ""
 }
 
 func validateNonEmptyStrings(prefix string, values []string) []string {

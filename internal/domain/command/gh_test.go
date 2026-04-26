@@ -128,6 +128,94 @@ func TestGhParserExtractsRunSemanticFields(t *testing.T) {
 	}
 }
 
+func TestGhParserExtractsIssueSemanticFields(t *testing.T) {
+	tests := []struct {
+		name            string
+		raw             string
+		wantVerb        string
+		wantIssueNumber string
+		wantState       string
+		wantLabel       string
+		wantAssignee    string
+		wantTitle       string
+		wantBody        string
+	}{
+		{name: "view", raw: "gh issue view 123", wantVerb: "view", wantIssueNumber: "123"},
+		{name: "list state label assignee", raw: "gh issue list --state closed --label bug --assignee tasuku43", wantVerb: "list", wantState: "closed", wantLabel: "bug", wantAssignee: "tasuku43"},
+		{name: "create title body", raw: `gh issue create --title "prod outage" --body "needs review"`, wantVerb: "create", wantTitle: "prod outage", wantBody: "needs review"},
+		{name: "comment body", raw: `gh issue comment 123 --body "looks good"`, wantVerb: "comment", wantIssueNumber: "123", wantBody: "looks good"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := singleParsedCommand(t, tt.raw).Gh
+			if got == nil {
+				t.Fatal("Gh semantic is nil")
+			}
+			if got.Area != "issue" || got.Verb != tt.wantVerb || got.IssueNumber != tt.wantIssueNumber ||
+				got.State != tt.wantState || got.Title != tt.wantTitle || got.Body != tt.wantBody {
+				t.Fatalf("Gh=%+v, want issue verb=%q number=%q state=%q title=%q body=%q",
+					got, tt.wantVerb, tt.wantIssueNumber, tt.wantState, tt.wantTitle, tt.wantBody)
+			}
+			if tt.wantLabel != "" && !containsString(got.Labels, tt.wantLabel) {
+				t.Fatalf("Labels=%#v, want %q", got.Labels, tt.wantLabel)
+			}
+			if tt.wantAssignee != "" && !containsString(got.Assignees, tt.wantAssignee) {
+				t.Fatalf("Assignees=%#v, want %q", got.Assignees, tt.wantAssignee)
+			}
+		})
+	}
+}
+
+func TestGhParserExtractsAdditionalAreaSemanticFields(t *testing.T) {
+	tests := []struct {
+		name             string
+		raw              string
+		wantArea         string
+		wantVerb         string
+		wantRepo         string
+		wantSecretName   string
+		wantOrg          string
+		wantEnvName      string
+		wantTag          string
+		wantPrerelease   bool
+		wantDraft        bool
+		wantLatest       bool
+		wantWorkflowName string
+		wantRef          string
+		wantSearchType   string
+		wantQuery        string
+		wantHostname     string
+	}{
+		{name: "repo view target", raw: "gh repo view owner/repo", wantArea: "repo", wantVerb: "view", wantRepo: "owner/repo"},
+		{name: "release create prerelease draft", raw: "gh release create v1.2.3 --prerelease --draft", wantArea: "release", wantVerb: "create", wantTag: "v1.2.3", wantPrerelease: true, wantDraft: true},
+		{name: "release view latest", raw: "gh release view --latest", wantArea: "release", wantVerb: "view", wantLatest: true},
+		{name: "secret set env org", raw: "gh secret set API_TOKEN --env-name prod --org my-org", wantArea: "secret", wantVerb: "set", wantSecretName: "API_TOKEN", wantEnvName: "prod", wantOrg: "my-org"},
+		{name: "workflow run ref", raw: "gh workflow run deploy.yml --ref main", wantArea: "workflow", wantVerb: "run", wantWorkflowName: "deploy.yml", wantRef: "main"},
+		{name: "search code query", raw: `gh search code "TODO owner:cli"`, wantArea: "search", wantVerb: "code", wantSearchType: "code", wantQuery: "TODO owner:cli"},
+		{name: "auth status hostname", raw: "gh auth status --hostname github.example.com", wantArea: "auth", wantVerb: "status", wantHostname: "github.example.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := singleParsedCommand(t, tt.raw).Gh
+			if got == nil {
+				t.Fatal("Gh semantic is nil")
+			}
+			if got.Area != tt.wantArea || got.Verb != tt.wantVerb || got.Repo != tt.wantRepo ||
+				got.SecretName != tt.wantSecretName || got.Org != tt.wantOrg || got.EnvName != tt.wantEnvName ||
+				got.Tag != tt.wantTag || got.Prerelease != tt.wantPrerelease || got.Draft != tt.wantDraft ||
+				got.Latest != tt.wantLatest || got.WorkflowName != tt.wantWorkflowName || got.Ref != tt.wantRef ||
+				got.SearchType != tt.wantSearchType || got.Query != tt.wantQuery || got.Hostname != tt.wantHostname {
+				t.Fatalf("Gh=%+v, want area=%q verb=%q repo=%q secret=%q org=%q env=%q tag=%q prerelease=%v draft=%v latest=%v workflow=%q ref=%q search_type=%q query=%q hostname=%q",
+					got, tt.wantArea, tt.wantVerb, tt.wantRepo, tt.wantSecretName, tt.wantOrg, tt.wantEnvName,
+					tt.wantTag, tt.wantPrerelease, tt.wantDraft, tt.wantLatest, tt.wantWorkflowName, tt.wantRef,
+					tt.wantSearchType, tt.wantQuery, tt.wantHostname)
+			}
+		})
+	}
+}
+
 func TestGhParserExtractsCommonSemanticFields(t *testing.T) {
 	got := singleParsedCommand(t, "GH_HOST=github.example.com gh --repo owner/repo api --hostname ghe.example.com --web repos/OWNER/REPO/pulls").Gh
 	if got == nil {

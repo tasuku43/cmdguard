@@ -136,15 +136,19 @@ var schemas = []Schema{
 	},
 	{
 		Command:     "gh",
-		Description: "GitHub CLI api, pr, and run operations.",
+		Description: "GitHub CLI api, pr, issue, repo, release, secret, search, workflow, auth, and run operations.",
 		Parser:      "gh",
 		Fields: []Field{
-			stringField("area", "Top-level gh area such as api, pr, or run."),
+			stringField("area", "Top-level gh area such as api, pr, issue, repo, release, secret, search, workflow, auth, or run."),
 			stringListField("area_in", "Allowed gh areas."),
 			stringField("verb", "gh subcommand verb inside the selected area."),
 			stringListField("verb_in", "Allowed gh verbs."),
-			stringField("repo", "Repository selected by -R or --repo."),
+			stringField("repo", "Repository selected by -R or --repo, or the target repository positional for gh repo commands."),
 			stringListField("repo_in", "Allowed repositories."),
+			stringField("org", "Organization selected by -o or --org."),
+			stringListField("org_in", "Allowed organizations."),
+			stringField("env", "Environment selected by -e/--env or --env-name."),
+			stringListField("env_in", "Allowed environments."),
 			stringField("hostname", "Hostname selected by --hostname."),
 			stringListField("hostname_in", "Allowed hostnames."),
 			boolField("web", "True when -w or --web is present."),
@@ -161,9 +165,28 @@ var schemas = []Schema{
 			stringListField("raw_field_keys_contains", "gh api -f/--raw-field keys that must be present."),
 			stringListField("header_keys_contains", "gh api -H/--header keys that must be present."),
 			stringField("pr_number", "Pull request number positional for gh pr commands."),
+			stringField("issue_number", "Issue number positional for gh issue commands."),
+			stringField("secret_name", "Secret name positional for gh secret commands."),
+			stringListField("secret_name_in", "Allowed gh secret names."),
+			stringField("tag", "Release tag positional for gh release commands."),
+			stringField("workflow_name", "Workflow name positional for gh workflow commands."),
+			stringField("workflow_id", "Workflow ID positional for gh workflow commands."),
+			stringField("search_type", "Search type for gh search commands, such as code, commits, issues, prs, or repos."),
+			stringListField("search_type_in", "Allowed gh search types."),
+			stringField("query_contains", "Substring that must be present in the gh search query."),
 			stringField("base", "Base branch selected by --base."),
 			stringField("head", "Head branch selected by --head."),
+			stringField("ref", "Ref selected by --ref."),
+			stringListField("ref_in", "Allowed refs selected by --ref."),
+			stringField("state", "Issue state selected by --state."),
+			stringListField("state_in", "Allowed issue states."),
+			stringListField("label_in", "Issue labels selected by -l or --label; at least one listed label must be present."),
+			stringListField("assignee_in", "Issue assignees selected by -a or --assignee; at least one listed assignee must be present."),
+			stringField("title_contains", "Substring that must be present in the issue title selected by -t or --title."),
+			stringField("body_contains", "Substring that must be present in the issue body selected by -b or --body."),
 			boolField("draft", "True when gh pr create --draft is present."),
+			boolField("prerelease", "True when gh release create/edit --prerelease is present."),
+			boolField("latest", "True when gh release create/view --latest is present."),
 			boolField("fill", "True when gh pr create --fill is present."),
 			boolField("force", "True for gh pr checkout --force or -f, and gh run rerun --force."),
 			boolField("admin", "True when gh pr merge --admin is present."),
@@ -187,6 +210,30 @@ var schemas = []Schema{
         semantic:
           area: api
           method_in: [POST, PATCH, PUT, DELETE]`},
+		},
+	},
+	{
+		Command:     "argocd",
+		Description: "Argo CD app operations such as app get, list, diff, sync, rollback, and delete.",
+		Parser:      "argocd",
+		Fields: []Field{
+			stringField("verb", "Argo CD action path such as app sync or app rollback."),
+			stringListField("verb_in", "Allowed Argo CD action paths."),
+			stringField("app_name", "Application name positional for argocd app commands."),
+			stringListField("app_name_in", "Allowed Argo CD application names."),
+			stringField("project", "Project selected by --project."),
+			stringListField("project_in", "Allowed Argo CD projects."),
+			stringField("revision", "Revision selected by --revision, or rollback revision positional."),
+			stringListField("flags_contains", "Parser-recognized argocd option tokens that must be present; this does not scan raw argv words."),
+			stringListField("flags_prefixes", "Parser-recognized argocd option tokens that must start with these prefixes; this depends on the argocd parser."),
+		},
+		Examples: []Example{
+			{Title: "Ask before syncing an app", YAML: `permission:
+  ask:
+    - command:
+        name: argocd
+        semantic:
+          verb: app sync`},
 		},
 	},
 	{

@@ -710,6 +710,54 @@ func TestPermissionRuleMatchesGhSemantic(t *testing.T) {
 			want:    true,
 		},
 		{
+			name:    "issue list label",
+			command: "gh issue list --state open --label prod --assignee tasuku43",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "issue", Verb: "list", State: "open", LabelIn: []string{"prod"}, AssigneeIn: []string{"tasuku43"}}},
+			want:    true,
+		},
+		{
+			name:    "issue create body contains",
+			command: `gh issue create --title "prod deploy" --body "needs review"`,
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "issue", Verb: "create", TitleContains: "prod", BodyContains: "review"}},
+			want:    true,
+		},
+		{
+			name:    "repo delete target",
+			command: "gh repo delete owner/prod",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "repo", Verb: "delete", RepoIn: []string{"owner/prod"}}},
+			want:    true,
+		},
+		{
+			name:    "release create production",
+			command: "gh release create v1.0.0",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "release", Verb: "create", Tag: "v1.0.0", Prerelease: boolPtr(false)}},
+			want:    true,
+		},
+		{
+			name:    "secret remove by env",
+			command: "gh secret remove API_TOKEN --env prod",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "secret", Verb: "remove", SecretNameIn: []string{"API_TOKEN"}, EnvName: "prod"}},
+			want:    true,
+		},
+		{
+			name:    "workflow run ref",
+			command: "gh workflow run deploy.yml --ref main",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "workflow", Verb: "run", WorkflowName: "deploy.yml", Ref: "main"}},
+			want:    true,
+		},
+		{
+			name:    "auth token",
+			command: "gh auth token --hostname github.com",
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "auth", Verb: "token", Hostname: "github.com"}},
+			want:    true,
+		},
+		{
+			name:    "search query contains",
+			command: `gh search code "TODO owner:repo"`,
+			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "search", SearchType: "code", QueryContains: "owner:repo"}},
+			want:    true,
+		},
+		{
 			name:    "wrong api method",
 			command: "gh api repos/OWNER/REPO/pulls",
 			match:   MatchSpec{Command: "gh", Semantic: &SemanticMatchSpec{Area: "api", Method: "DELETE"}},
@@ -737,6 +785,48 @@ func TestPermissionRuleMatchesGhSemantic(t *testing.T) {
 			name:    "generic fallback does not satisfy gh semantic",
 			command: "unknown api repos/OWNER/REPO/pulls",
 			match:   MatchSpec{Command: "unknown", Semantic: &SemanticMatchSpec{Area: "api"}},
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.match.MatchMatches(tt.command); got != tt.want {
+				t.Fatalf("MatchMatches(%q)=%v, want %v", tt.command, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPermissionRuleMatchesArgoCDSemantic(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		match   MatchSpec
+		want    bool
+	}{
+		{
+			name:    "app diff allowed",
+			command: "argocd app diff payments --project prod",
+			match:   MatchSpec{Command: "argocd", Semantic: &SemanticMatchSpec{Verb: "app diff", AppName: "payments", Project: "prod"}},
+			want:    true,
+		},
+		{
+			name:    "app rollback revision",
+			command: "argocd app rollback payments 42",
+			match:   MatchSpec{Command: "argocd", Semantic: &SemanticMatchSpec{Verb: "app rollback", Revision: "42"}},
+			want:    true,
+		},
+		{
+			name:    "wrong app",
+			command: "argocd app sync payments",
+			match:   MatchSpec{Command: "argocd", Semantic: &SemanticMatchSpec{Verb: "app sync", AppName: "billing"}},
+			want:    false,
+		},
+		{
+			name:    "generic fallback does not satisfy argocd semantic",
+			command: "unknown app sync payments",
+			match:   MatchSpec{Command: "unknown", Semantic: &SemanticMatchSpec{Verb: "app sync"}},
 			want:    false,
 		},
 	}

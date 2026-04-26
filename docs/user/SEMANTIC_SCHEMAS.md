@@ -27,6 +27,7 @@ The current registry supports:
 - `kubectl`
 - `gh`
 - `helmfile`
+- `argocd`
 
 Treat the CLI output as the source of truth for the installed binary. Commands
 without a semantic schema should use `patterns`.
@@ -146,8 +147,10 @@ permission:
 
 ## gh
 
-Use GitHub CLI semantic fields for `api`, `pr`, and `run` workflows, including
-repository selectors, API method and endpoint, PR merge options, run rerun
+Use GitHub CLI semantic fields for `api`, `pr`, `issue`, `repo`, `release`,
+`secret`, `search`, `workflow`, `auth`, and `run` workflows, including
+repository selectors, API method and endpoint, issue metadata, release tags,
+secret names, workflow refs, search query text, PR merge options, run rerun
 options, and parser-recognized flags.
 
 Boolean fields include:
@@ -156,6 +159,8 @@ Boolean fields include:
 - `paginate`, `input`, `silent`, `include_headers`: true for the corresponding
   `gh api` options.
 - `draft`, `fill`: true for the corresponding `gh pr create` options.
+- `draft`, `prerelease`, `latest`: true for the corresponding `gh release`
+  options.
 - `force`: true for `gh pr checkout --force` or `-f`, and `gh run rerun
   --force`.
 - `admin`, `auto`, `delete_branch`: true for the corresponding `gh pr merge`
@@ -176,6 +181,68 @@ permission:
             - PATCH
             - PUT
             - DELETE
+```
+
+Issue examples:
+
+```yaml
+permission:
+  allow:
+    - name: gh issue read-only
+      command:
+        name: gh
+        semantic:
+          area: issue
+          verb_in: [view, list, status]
+  ask:
+    - name: gh issue comment critical repo
+      command:
+        name: gh
+        semantic:
+          area: issue
+          verb: comment
+          repo_in: [owner/prod]
+```
+
+Additional area examples:
+
+```yaml
+permission:
+  allow:
+    - name: gh safe read operations
+      command:
+        name: gh
+        semantic:
+          area_in: [repo, release, secret, workflow, auth]
+          verb_in: [view, list, status]
+  deny:
+    - name: gh token exposure
+      command:
+        name: gh
+        semantic:
+          area: auth
+          verb: token
+    - name: gh remove secrets
+      command:
+        name: gh
+        semantic:
+          area: secret
+          verb: remove
+  ask:
+    - name: production release create
+      command:
+        name: gh
+        semantic:
+          area: release
+          verb: create
+          prerelease: false
+    - name: production workflow run
+      command:
+        name: gh
+        semantic:
+          area: workflow
+          verb: run
+          repo_in: [owner/prod]
 ```
 
 ## helmfile
@@ -209,6 +276,35 @@ permission:
         semantic:
           verb: destroy
           environment: prod
+```
+
+## argocd
+
+Use Argo CD semantic fields for app action path, app name, project, revision,
+and parser-recognized flags. App verbs are represented as action paths such as
+`app get`, `app list`, `app diff`, `app sync`, `app rollback`, and `app
+delete`.
+
+```yaml
+permission:
+  allow:
+    - name: argocd app read-only
+      command:
+        name: argocd
+        semantic:
+          verb_in: [app get, app list, app diff]
+  ask:
+    - name: argocd app sync
+      command:
+        name: argocd
+        semantic:
+          verb: app sync
+  deny:
+    - name: argocd destructive app ops
+      command:
+        name: argocd
+        semantic:
+          verb_in: [app delete, app rollback]
 ```
 
 ## Unsupported Commands
