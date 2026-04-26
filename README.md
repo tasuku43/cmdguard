@@ -77,7 +77,8 @@ Claude settings.json permissions and cc-bash-guard policy are both permission
 sources. `abstain` means no matching rule. `deny` always wins, and an explicit
 `ask` is not overridden by `allow` from another source. The final fallback is
 `ask` only when all sources abstain. No configuration is required to choose
-merge behavior.
+merge behavior. For compound commands such as `A && B`, permission sources are
+merged for each command element before the compound decision is aggregated.
 
 Each rule uses `command`, `env`, or `patterns`. `command` and `patterns` cannot
 be combined in one rule. `env` can be combined with either.

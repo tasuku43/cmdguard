@@ -112,6 +112,85 @@ func TestSecurityRegressionMatrixPermissionSourceMerge(t *testing.T) {
 	}
 }
 
+func TestCompositionMergesClaudeSettingsPerCommand(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	writeSettings(t, filepath.Join(home, ".claude", "settings.json"), claudeSettingsJSON(nil, nil, []string{"cd:*"}))
+
+	p := policy.NewPipeline(policy.PipelineSpec{
+		Permission: policy.PermissionSpec{
+			Allow: []policy.PermissionRuleSpec{
+				{
+					Command: policy.PermissionCommandSpec{
+						Name:     "git",
+						Semantic: &policy.SemanticMatchSpec{Verb: "status"},
+					},
+				},
+			},
+		},
+	}, policy.Source{})
+
+	base, err := policy.Evaluate(p, "cd repo && git status")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if base.Outcome != "ask" {
+		t.Fatalf("base Outcome = %q, want ask before Claude bridge; decision=%+v", base.Outcome, base)
+	}
+
+	decision := ApplyPermissionBridge(Tool, base, cwd, home)
+	if decision.Outcome != "allow" {
+		t.Fatalf("Outcome = %q, want allow; decision=%+v", decision.Outcome, decision)
+	}
+	if decision.Reason != "composition" {
+		t.Fatalf("Reason = %q, want composition; decision=%+v", decision.Reason, decision)
+	}
+	if got := compositionCommandEffects(decision.Trace); !equalStrings(got, []string{"allow", "allow"}) {
+		t.Fatalf("composition.command effects=%#v, want both allow; trace=%+v", got, decision.Trace)
+	}
+	if !bridgeTraceContainsReason(decision.Trace, "permission_sources_merge", "source allowed") {
+		t.Fatalf("trace missing allowed merge; trace=%+v", decision.Trace)
+	}
+}
+
+func TestCompositionExplicitAskBeatsClaudeSettingsPerCommandAllow(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	writeSettings(t, filepath.Join(home, ".claude", "settings.json"), claudeSettingsJSON(nil, nil, []string{"cd:*"}))
+
+	p := policy.NewPipeline(policy.PipelineSpec{
+		Permission: policy.PermissionSpec{
+			Ask: []policy.PermissionRuleSpec{
+				{Command: policy.PermissionCommandSpec{Name: "cd"}},
+			},
+			Allow: []policy.PermissionRuleSpec{
+				{
+					Command: policy.PermissionCommandSpec{
+						Name:     "git",
+						Semantic: &policy.SemanticMatchSpec{Verb: "status"},
+					},
+				},
+			},
+		},
+	}, policy.Source{})
+
+	base, err := policy.Evaluate(p, "cd repo && git status")
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+
+	decision := ApplyPermissionBridge(Tool, base, cwd, home)
+	if decision.Outcome != "ask" {
+		t.Fatalf("Outcome = %q, want ask; decision=%+v", decision.Outcome, decision)
+	}
+	if got := compositionCommandEffects(decision.Trace); !equalStrings(got, []string{"ask", "allow"}) {
+		t.Fatalf("composition.command effects=%#v, want ask then allow; trace=%+v", got, decision.Trace)
+	}
+	if !bridgeTraceContainsReason(decision.Trace, "permission_sources_merge", "source asked") {
+		t.Fatalf("trace missing asked merge; trace=%+v", decision.Trace)
+	}
+}
+
 func claudeSettingsJSON(deny []string, ask []string, allow []string) string {
 	return `{"permissions":{"deny":` + bashPatternsJSON(deny) + `,"ask":` + bashPatternsJSON(ask) + `,"allow":` + bashPatternsJSON(allow) + `}}`
 }
@@ -137,4 +216,26 @@ func bridgeTraceContainsReason(trace []policy.TraceStep, name string, reason str
 		}
 	}
 	return false
+}
+
+func compositionCommandEffects(trace []policy.TraceStep) []string {
+	var effects []string
+	for _, step := range trace {
+		if step.Name == "composition.command" {
+			effects = append(effects, step.Effect)
+		}
+	}
+	return effects
+}
+
+func equalStrings(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

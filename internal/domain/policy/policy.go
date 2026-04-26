@@ -217,6 +217,7 @@ type TraceStep struct {
 	Action              string   `json:"action"`
 	Name                string   `json:"name,omitempty"`
 	Effect              string   `json:"effect,omitempty"`
+	Explicit            bool     `json:"explicit,omitempty"`
 	RuleType            string   `json:"rule_type,omitempty"`
 	From                string   `json:"from,omitempty"`
 	To                  string   `json:"to,omitempty"`
@@ -627,6 +628,7 @@ type commandDecision struct {
 	Outcome  string
 	Rule     PermissionRuleSpec
 	Matched  bool
+	Explicit bool
 	RuleType string
 	Command  commandpkg.Command
 }
@@ -758,25 +760,25 @@ func unsafeCompositionReason(shape commandpkg.ShellShape) string {
 
 func evaluatePreparedCommand(deny []preparedPermissionRule, ask []preparedPermissionRule, allow []preparedPermissionRule, cmd commandpkg.Command) commandDecision {
 	if rule, ok := firstPreparedCommandPatternMatch(deny, cmd); ok {
-		return commandDecision{Outcome: "deny", Rule: rule, Matched: true, RuleType: permissionRuleTypeRaw, Command: cmd}
+		return commandDecision{Outcome: "deny", Rule: rule, Matched: true, Explicit: true, RuleType: permissionRuleTypeRaw, Command: cmd}
 	}
 	if rule, ok := firstPreparedCommandMatch(deny, cmd); ok {
-		return commandDecision{Outcome: "deny", Rule: rule, Matched: true, RuleType: permissionRuleTypeStructured, Command: cmd}
+		return commandDecision{Outcome: "deny", Rule: rule, Matched: true, Explicit: true, RuleType: permissionRuleTypeStructured, Command: cmd}
 	}
 	if rule, ok := firstPreparedCommandPatternMatch(ask, cmd); ok {
-		return commandDecision{Outcome: "ask", Rule: rule, Matched: true, RuleType: permissionRuleTypeRaw, Command: cmd}
+		return commandDecision{Outcome: "ask", Rule: rule, Matched: true, Explicit: true, RuleType: permissionRuleTypeRaw, Command: cmd}
 	}
 	if rule, ok := firstPreparedCommandMatch(ask, cmd); ok {
-		return commandDecision{Outcome: "ask", Rule: rule, Matched: true, RuleType: permissionRuleTypeStructured, Command: cmd}
+		return commandDecision{Outcome: "ask", Rule: rule, Matched: true, Explicit: true, RuleType: permissionRuleTypeStructured, Command: cmd}
 	}
 	if hasUnresolvedSemanticGuard(deny, cmd) || hasUnresolvedSemanticGuard(ask, cmd) {
-		return commandDecision{Outcome: "ask", Command: cmd}
+		return commandDecision{Outcome: "ask", Explicit: true, Command: cmd}
 	}
 	if rule, ok := firstPreparedCommandAllowMatch(allow, cmd); ok {
-		return commandDecision{Outcome: "allow", Rule: rule, Matched: true, RuleType: permissionRuleTypeStructured, Command: cmd}
+		return commandDecision{Outcome: "allow", Rule: rule, Matched: true, Explicit: true, RuleType: permissionRuleTypeStructured, Command: cmd}
 	}
 	if rule, ok := firstPreparedCommandPatternAllowMatch(allow, cmd); ok {
-		return commandDecision{Outcome: "allow", Rule: rule, Matched: true, RuleType: permissionRuleTypeRaw, Command: cmd}
+		return commandDecision{Outcome: "allow", Rule: rule, Matched: true, Explicit: true, RuleType: permissionRuleTypeRaw, Command: cmd}
 	}
 	return commandDecision{Outcome: "ask", Command: cmd}
 }
@@ -802,6 +804,7 @@ func compositionTrace(plan commandpkg.CommandPlan, decisions []commandDecision, 
 			Action:              "permission",
 			Name:                "composition.command",
 			Effect:              commandDecision.Outcome,
+			Explicit:            commandDecision.Explicit,
 			RuleType:            commandDecision.RuleType,
 			Command:             cmd.Raw,
 			CommandIndex:        &index,

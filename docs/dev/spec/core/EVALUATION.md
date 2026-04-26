@@ -36,7 +36,9 @@ must not broaden to `allow`.
 Compound commands are evaluated through `CommandPlan.Commands`. If any inner
 command is denied, the whole command is denied. If all inner commands are
 allowed and the composition shape is allowable, the whole command may allow;
-otherwise it falls back to `ask`.
+otherwise it falls back to `ask`. When multiple permission sources are active,
+each inner command is evaluated through the merged source result before the
+compound decision is aggregated.
 
 Raw regex matching is always `patterns`. Semantic parser support is reserved
 for higher-risk command families such as `git`, `gh`, `aws`, `kubectl`, and
