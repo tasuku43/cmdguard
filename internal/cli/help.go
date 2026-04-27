@@ -42,7 +42,7 @@ Policy model:
   Rules live under permission.deny, permission.ask, and permission.allow.
   Use top-level include to split policy and E2E tests across local YAML files.
   Decision order is deny > ask > allow; unmatched commands fall back to ask.
-  cc-bash-guard evaluates commands and only rewrites when hook --rtk is enabled.
+  cc-bash-guard never rewrites commands itself; it returns allow, ask, or deny.
 
 Learn more:
   cc-bash-guard help init
@@ -160,7 +160,7 @@ Usage:
   cc-bash-guard hook [--rtk] [--auto-verify]
 
 Options:
-  --rtk          run "rtk rewrite" once after cc-bash-guard permission evaluation
+  --rtk          after permission evaluation, delegate rewriting to external RTK
   --auto-verify  regenerate verified hook artifacts when they are missing or stale
 
 Note:
@@ -169,11 +169,10 @@ Note:
   when verified artifacts are missing or stale. --auto-verify is convenient, but
   it lets hook-time config changes become active without a separate review step.
 
-RTK compatibility:
-  --rtk applies rtk rewrite after cc-bash-guard permission evaluation in the same
-  hook invocation. Permission checks therefore see the command before the rtk
-  rename/rewrite is applied. Prefer this over stacking cc-bash-guard and rtk as
-  separate Bash hooks.
+RTK integration:
+  If you use RTK rewriting, use cc-bash-guard hook --rtk as the single Bash hook.
+  cc-bash-guard evaluates permissions first, then invokes external rtk rewrite
+  only when the merged decision is not deny.
 
 `)
 	case "explain":
@@ -399,9 +398,9 @@ AWS profile style:
   parser can still evaluate profile, service, and operation semantically.
 
 Command not being rewritten:
-  By default, cc-bash-guard evaluates commands but does not rewrite them.
-  Parser-backed normalization is evaluation-only. If RTK rewriting is needed,
-  use cc-bash-guard hook --rtk as the single Bash hook.
+  cc-bash-guard evaluates commands but does not rewrite them. Parser-backed
+  normalization is evaluation-only. It only returns allow, ask, or deny. If you
+  use RTK rewriting, use cc-bash-guard hook --rtk as the single Bash hook.
 
 Docs:
   docs/user/TROUBLESHOOTING.md

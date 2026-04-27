@@ -173,6 +173,47 @@ test:
 	}
 }
 
+func TestRunHookClaudeSupportedPolicyDoesNotInvokeRTKWithoutFlag(t *testing.T) {
+	toolDir := t.TempDir()
+	markerPath := filepath.Join(toolDir, "called")
+	rtkPath := filepath.Join(toolDir, "rtk")
+	script := fmt.Sprintf("#!/bin/sh\nprintf called > %q\nprintf 'rtk %%s\\n' \"$2\"\n", markerPath)
+	if err := os.WriteFile(rtkPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", toolDir, os.Getenv("PATH")))
+
+	payload := runClaudeHookMapTest(t, hookEnvSpec{
+		UserConfig: `permission:
+  allow:
+    - command:
+        name: git
+        semantic:
+          verb: diff
+      test:
+        allow:
+          - "git diff goal.md"
+        pass:
+          - "git status"
+test:
+  - in: "git diff goal.md"
+    decision: allow
+`,
+		Command: "git diff goal.md",
+	})
+
+	hookOut := payload["hookSpecificOutput"].(map[string]any)
+	if hookOut["permissionDecision"] != "allow" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if _, ok := hookOut["updatedInput"]; ok {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
+		t.Fatalf("rtk should not run without --rtk, stat err=%v", err)
+	}
+}
+
 func TestRunHookClaudeAskOmitsPermissionDecision(t *testing.T) {
 	home := t.TempDir()
 	writeUserConfig(t, home, `permission:
@@ -393,6 +434,9 @@ test:
 		t.Fatalf("code = 0, want failure stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "top-level rewrite is no longer supported") {
+		t.Fatalf("stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Use permission.command / env / patterns") {
 		t.Fatalf("stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }

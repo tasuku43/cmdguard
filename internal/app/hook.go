@@ -59,6 +59,8 @@ func hookPayload(decision policy.Decision, originalCommand string) map[string]an
 			"hookEventName":            "PreToolUse",
 			"permissionDecisionReason": permissionDecisionReason(decision, "cc-bash-guard permission evaluated"),
 		}
+		// updatedInput is reserved for the RTK integration bridge. Supported
+		// cc-bash-guard policy evaluation never rewrites commands.
 		if decision.Command != originalCommand {
 			hookOutput["updatedInput"] = map[string]any{"command": decision.Command}
 		}
@@ -116,6 +118,8 @@ func hookErrorPayload(tool string, code string, message string) map[string]any {
 }
 
 func applyRTKRewrite(decision policy.Decision) policy.Decision {
+	// RTK integration only. cc-bash-guard itself does not rewrite commands; this
+	// bridge delegates to the external rtk binary after policy evaluation.
 	rewritten, ok := infra.RewriteRTK(decision.Command)
 	if !ok || rewritten == decision.Command {
 		return decision
@@ -131,6 +135,8 @@ func applyRTKRewrite(decision policy.Decision) policy.Decision {
 }
 
 func buildRewriteSystemMessage(decision policy.Decision) (string, bool) {
+	// RTK integration only. Current cc-bash-guard policy behavior does not
+	// produce rewrite trace steps.
 	ruleIDs := make([]string, 0, len(decision.Trace))
 	for _, step := range decision.Trace {
 		if step.Action != "rewrite" {

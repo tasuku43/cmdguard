@@ -18,7 +18,9 @@ type HookResult struct {
 
 type HookOptions struct {
 	AutoVerify bool
-	UseRTK     bool
+	// UseRTK delegates to external RTK after permission evaluation. This keeps
+	// RTK coexistence in one hook but is not cc-bash-guard policy rewriting.
+	UseRTK bool
 }
 
 type DoctorResult struct {

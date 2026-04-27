@@ -13,7 +13,9 @@ import (
 )
 
 type PipelineSpec struct {
-	Include    []string         `yaml:"include" json:"-"`
+	Include []string `yaml:"include" json:"-"`
+	// Rewrite is retained only to reject unsupported configs with guidance.
+	// It is not a supported user-facing feature.
 	Rewrite    []map[string]any `yaml:"rewrite" json:"rewrite,omitempty"`
 	Permission PermissionSpec   `yaml:"permission" json:"permission,omitempty"`
 	Test       PipelineTestSpec `yaml:"test" json:"test,omitempty"`
@@ -55,7 +57,9 @@ type PermissionTestSpec struct {
 type PipelineTestSpec []PipelineExpectCase
 
 type PipelineExpectCase struct {
-	In        string `yaml:"in" json:"in,omitempty"`
+	In string `yaml:"in" json:"in,omitempty"`
+	// Rewritten is retained only to reject unsupported tests with guidance.
+	// cc-bash-guard tests assert permission decisions, not rewritten commands.
 	Rewritten string `yaml:"rewritten" json:"rewritten,omitempty"`
 	Decision  string `yaml:"decision" json:"decision,omitempty"`
 	Source    Source `yaml:"-" json:"source,omitempty"`
@@ -514,25 +518,6 @@ func commandPlanTraceSteps(plan commandpkg.CommandPlan) []TraceStep {
 
 func boolPtr(v bool) *bool {
 	return &v
-}
-
-func rewriteInvariantViolationReasons(beforePlan commandpkg.CommandPlan, beforeSafety commandpkg.EvaluationSafety, afterPlan commandpkg.CommandPlan, afterSafety commandpkg.EvaluationSafety) []string {
-	var reasons []string
-	if beforeSafety.Safe && !afterSafety.Safe {
-		reasons = append(reasons, "rewrite_safe_to_unsafe")
-	}
-	if beforePlan.Shape.Kind == commandpkg.ShellShapeSimple && afterPlan.Shape.Kind != commandpkg.ShellShapeSimple {
-		reasons = append(reasons, "rewrite_simple_to_"+string(afterPlan.Shape.Kind))
-	}
-	if afterPlan.Shape.Kind == commandpkg.ShellShapeUnknown {
-		reasons = append(reasons, "rewrite_unknown_shape")
-	}
-	if !afterSafety.Safe {
-		for _, reason := range afterSafety.Reasons {
-			reasons = append(reasons, "rewrite_"+reason)
-		}
-	}
-	return dedupeStrings(reasons)
 }
 
 func dedupeStrings(values []string) []string {

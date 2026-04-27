@@ -19,7 +19,8 @@ Runtime flow:
 5. merge `cc-bash-guard` policy with Claude settings as permission sources
    using `deny > ask > allow > abstain`
 6. when `--rtk` is enabled and the merged decision is not `deny`, invoke
-   `rtk rewrite` once and apply the returned command as `updatedInput.command`
+   external `rtk rewrite` once and apply the returned command as
+   `updatedInput.command`
 7. emit `allow`, `ask`, `deny`, or error output
 
 `abstain` means a source had no matching rule. The final fallback is `ask` only
@@ -28,7 +29,7 @@ when all sources abstain.
 `cc-bash-guard` does not emit `updatedInput.command` for policy evaluation.
 Parser-backed normalization is evaluation-only.
 
-By default, `cc-bash-guard hook` does not rewrite commands. `--rtk` is a
-compatibility path for installations that need RTK command rewriting. It must be
-used instead of registering RTK as a second Bash hook, so permission evaluation
-and RTK rewriting happen in one ordered hook invocation.
+`cc-bash-guard hook` does not rewrite commands itself. `--rtk` is an explicit
+integration path for installations that use RTK rewriting: cc-bash-guard
+evaluates permissions first, then delegates rewriting to external RTK in the
+same hook invocation.

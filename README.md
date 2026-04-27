@@ -7,10 +7,14 @@ behavior belongs in [`docs/dev/spec`](docs/dev/spec/README.md) and must not be
 treated as shipped unless the spec status is `implemented` and the behavior is
 covered by tests.
 
-By default, `cc-bash-guard` does not rewrite commands. It parses the input
-command string, evaluates permission policy, and returns `allow`, `ask`, or
-`deny`. The command string passed through the hook remains the original command
-unless the compatibility `hook --rtk` option is enabled.
+`cc-bash-guard` never rewrites commands. It parses the input command string,
+evaluates permission policy, and returns `allow`, `ask`, or `deny`. The command
+string passed through the hook remains the original command.
+
+If you use RTK rewriting, use `cc-bash-guard hook --rtk` as the single Bash
+hook. In that mode `cc-bash-guard` still evaluates permissions first, then
+delegates the rewrite step to the external `rtk rewrite` command. Do not
+register RTK as a second Bash hook.
 
 Parser-backed normalization is evaluation-only:
 
@@ -28,8 +32,8 @@ Parser-backed normalization is evaluation-only:
 Stable user-facing features:
 
 - Claude Code hook integration via `cc-bash-guard hook`
-- optional `cc-bash-guard hook --rtk` compatibility path that runs `rtk rewrite`
-  after permission evaluation
+- optional `cc-bash-guard hook --rtk` RTK integration that runs permission
+  evaluation before external `rtk rewrite`
 - permission buckets `deny`, `ask`, and `allow`
 - permission rules using `command`, `env`, and `patterns`
 - top-level `include` for splitting policy and E2E tests across local YAML files
@@ -79,8 +83,8 @@ hook. Use one hook instead:
 ```
 
 With `--rtk`, `cc-bash-guard` evaluates permissions first. If the command is not
-denied, it invokes `rtk rewrite` once and emits `updatedInput.command` when RTK
-returns a different command.
+denied, it invokes external `rtk rewrite` once and emits `updatedInput.command`
+only when RTK returns a different command.
 
 ## Config Includes
 
@@ -230,9 +234,9 @@ permission decisions:
 - `busybox sh -c 'git status'`
 
 This is not command rewriting. The command returned to the hook remains the
-original command unless `hook --rtk` is enabled. Non-`-c` shell invocations such
-as `bash script.sh` are not expanded. Unsafe or unparsable inner shell commands
-fail closed.
+original command, except when `hook --rtk` delegates to external RTK rewriting.
+Non-`-c` shell invocations such as `bash script.sh` are not expanded. Unsafe or
+unparsable inner shell commands fail closed.
 
 ## CLI Help
 

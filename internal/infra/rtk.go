@@ -7,6 +7,8 @@ import (
 )
 
 func RewriteRTK(command string) (string, bool) {
+	// RTK integration only. This intentionally shells out to RTK rather than
+	// adding rewrite behavior to cc-bash-guard policy.
 	cmd := exec.Command("rtk", "rewrite", command)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

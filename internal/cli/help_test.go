@@ -41,6 +41,7 @@ func TestRootHelpOrientsNewUsers(t *testing.T) {
 		"top-level include",
 		"deny > ask > allow",
 		"unmatched commands fall back to ask",
+		"never rewrites commands itself",
 		"cc-bash-guard help init",
 		"cc-bash-guard help config",
 		"cc-bash-guard help permission",
@@ -51,6 +52,36 @@ func TestRootHelpOrientsNewUsers(t *testing.T) {
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("root help missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestHookHelpDocumentsNoPolicyRewriteAndRTKIntegration(t *testing.T) {
+	code, stdout, stderr := runCLIHelpTest("help", "hook")
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	for _, want := range []string{
+		"returns Claude Code hook JSON for allow, ask, deny",
+		"cc-bash-guard hook [--rtk] [--auto-verify]",
+		"--rtk",
+		"delegate rewriting to external RTK",
+		"RTK integration:",
+		"single Bash hook",
+		"evaluates permissions first",
+		"external rtk rewrite",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("help hook missing %q:\n%s", want, stdout)
+		}
+	}
+	for _, bad := range []string{
+		"compatibility path",
+		"legacy",
+		"hidden",
+	} {
+		if strings.Contains(stdout, bad) {
+			t.Fatalf("help hook contains %q:\n%s", bad, stdout)
 		}
 	}
 }
@@ -373,6 +404,37 @@ func TestUserDocsExamplesUseCurrentPermissionShape(t *testing.T) {
 			if strings.Contains(body, bad) {
 				t.Fatalf("%s contains unsupported or out-of-scope text %q", path, bad)
 			}
+		}
+	}
+}
+
+func TestReadmeDocumentsNoPolicyRewriteAndRTKIntegration(t *testing.T) {
+	bodyBytes, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatalf("read README: %v", err)
+	}
+	body := string(bodyBytes)
+	for _, want := range []string{
+		"`cc-bash-guard` never rewrites commands",
+		"returns `allow`, `ask`, or `deny`",
+		"If you use RTK rewriting",
+		"`cc-bash-guard hook --rtk` as the single Bash",
+		"evaluates permissions first",
+		"external `rtk rewrite`",
+		"register RTK as a second Bash hook",
+		"top-level `rewrite`, `verify` fails with migration guidance",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("README missing %q", want)
+		}
+	}
+	for _, bad := range []string{
+		"compatibility path",
+		"legacy",
+		"hidden",
+	} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("README contains %q", bad)
 		}
 	}
 }
