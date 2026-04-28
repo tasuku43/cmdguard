@@ -97,9 +97,14 @@ type VerifyOptions struct {
 type InitResult struct {
 	ConfigPath             string
 	Created                bool
+	Profile                string
 	ClaudeSettingsPath     string
 	ClaudeSettingsDetected bool
 	HookSnippet            string
+}
+
+type InitOptions struct {
+	Profile string
 }
 
 type VersionResult struct {

@@ -165,7 +165,11 @@ func TestHelpInitGivesNextSteps(t *testing.T) {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
 	for _, want := range []string{
-		"creates a starter deny rule and test case",
+		"cc-bash-guard init --profile git-safe",
+		"cc-bash-guard init --list-profiles",
+		"creates a starter config when the config file is missing",
+		"can create a verified starter profile with policy examples and tests",
+		"leaves an existing config file unchanged",
 		"prints the user config path",
 		"prints the Claude Code PreToolUse Bash hook snippet",
 		"After init:",

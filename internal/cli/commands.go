@@ -167,12 +167,43 @@ func runInit(args []string, streams Streams, env Env) int {
 		writeCommandHelp(streams.Stdout, "init")
 		return exitAllow
 	}
-	if len(args) != 0 {
-		writeCommandHelp(streams.Stderr, "init")
-		return exitError
+	var opts app.InitOptions
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--list-profiles":
+			if len(args) != 1 {
+				writeCommandHelp(streams.Stderr, "init")
+				return exitError
+			}
+			for _, profile := range app.InitProfiles() {
+				writeLine(streams.Stdout, profile.Name+"\t"+profile.Description)
+			}
+			return exitAllow
+		case arg == "--profile":
+			if i+1 >= len(args) {
+				writeCommandHelp(streams.Stderr, "init")
+				return exitError
+			}
+			opts.Profile = args[i+1]
+			i++
+		case strings.HasPrefix(arg, "--profile="):
+			opts.Profile = strings.TrimPrefix(arg, "--profile=")
+		default:
+			writeCommandHelp(streams.Stderr, "init")
+			return exitError
+		}
+	}
+	if opts.Profile == "" {
+		for _, arg := range args {
+			if arg == "--profile" || strings.HasPrefix(arg, "--profile=") {
+				writeCommandHelp(streams.Stderr, "init")
+				return exitError
+			}
+		}
 	}
 
-	result, err := app.RunInit(env)
+	result, err := app.RunInitWithOptions(env, opts)
 	if err != nil {
 		writeErr(streams.Stderr, err.Error())
 		return exitError
@@ -182,6 +213,12 @@ func runInit(args []string, streams Streams, env Env) int {
 		writeLine(streams.Stdout, "created "+result.ConfigPath)
 	} else {
 		writeLine(streams.Stdout, "exists "+result.ConfigPath)
+		if result.Profile != "" {
+			writeLine(streams.Stdout, "profile not applied because the config file already exists")
+		}
+	}
+	if result.Profile != "" && result.Created {
+		writeLine(streams.Stdout, "profile: "+result.Profile)
 	}
 	writeLine(streams.Stdout, "user config: "+result.ConfigPath)
 	if result.ClaudeSettingsDetected {

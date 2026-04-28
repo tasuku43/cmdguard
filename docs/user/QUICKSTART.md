@@ -12,7 +12,7 @@ Homebrew:
 ```sh
 brew tap tasuku43/cc-bash-guard
 brew install cc-bash-guard
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 ```
 
@@ -20,7 +20,7 @@ mise:
 
 ```sh
 mise use -g github:tasuku43/cc-bash-guard@latest
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 ```
 
@@ -32,8 +32,19 @@ see `INSTALL.md`.
 ```sh
 cc-bash-guard version
 cc-bash-guard doctor
-cc-bash-guard init
+cc-bash-guard init --list-profiles
+cc-bash-guard init --profile git-safe
 ```
+
+`init` without `--profile` keeps the legacy starter config. The built-in
+profiles create useful verified policy examples with tests:
+
+- `balanced`: common read-only allows, confirmation for risky writes, and
+  destructive Git denies
+- `strict`: no broad allows; most examples ask, destructive examples deny
+- `git-safe`: Git-focused read-only allows and guarded history changes
+- `aws-k8s`: AWS identity/read-only and kubectl read-only examples
+- `argocd`: Argo CD read/status examples with app deletion blocked
 
 The user config lives at:
 

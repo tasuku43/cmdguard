@@ -9,7 +9,7 @@ Go toolchain build.
 ```sh
 brew tap tasuku43/cc-bash-guard
 brew install cc-bash-guard
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 ```
 
@@ -21,7 +21,7 @@ pins SHA-256 checksums against GitHub Releases archives.
 
 ```sh
 mise use -g github:tasuku43/cc-bash-guard@latest
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 ```
 
@@ -56,7 +56,7 @@ Put the binary on `PATH`:
 mkdir -p "$HOME/.local/bin"
 tar -xzf "$ARCHIVE" cc-bash-guard
 install -m 0755 cc-bash-guard "$HOME/.local/bin/cc-bash-guard"
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 ```
 
@@ -66,9 +66,11 @@ For Go toolchain users:
 
 ```sh
 go install github.com/tasuku43/cc-bash-guard/cmd/cc-bash-guard@latest
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 ```
+
+Use `cc-bash-guard init --list-profiles` to see the available starter profiles.
 
 The module requires Go 1.25 or newer. Make sure your Go install directory is on
 `PATH`; by default that is usually `$(go env GOPATH)/bin`.

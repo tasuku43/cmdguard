@@ -161,14 +161,22 @@ Claude Code PreToolUse hook snippet.
 
 Usage:
   cc-bash-guard init
+  cc-bash-guard init --profile balanced
+  cc-bash-guard init --profile strict
+  cc-bash-guard init --profile git-safe
+  cc-bash-guard init --profile aws-k8s
+  cc-bash-guard init --profile argocd
+  cc-bash-guard init --list-profiles
 
 What it does:
-  - creates a starter deny rule and test case when the config file is missing
+  - creates a starter config when the config file is missing
+  - can create a verified starter profile with policy examples and tests
+  - leaves an existing config file unchanged
   - prints the user config path
   - prints the Claude Code PreToolUse Bash hook snippet
 
 After init:
-  cc-bash-guard init
+  cc-bash-guard init --profile git-safe
   edit ~/.config/cc-bash-guard/cc-bash-guard.yml
   cc-bash-guard verify
   add the printed snippet to ~/.claude/settings.json

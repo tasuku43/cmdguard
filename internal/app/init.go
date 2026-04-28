@@ -2,15 +2,30 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/tasuku43/cc-bash-guard/internal/infra"
 )
 
 func RunInit(env Env) (InitResult, error) {
+	return RunInitWithOptions(env, InitOptions{})
+}
+
+func RunInitWithOptions(env Env, opts InitOptions) (InitResult, error) {
 	configDir := filepath.Join(userConfigBase(env.Home, env.XDGConfigHome), "cc-bash-guard")
 	if err := infra.MkdirAll(configDir, 0o755); err != nil {
 		return InitResult{}, err
+	}
+
+	config := starterConfig
+	if opts.Profile != "" {
+		profile, ok := LookupInitProfile(opts.Profile)
+		if !ok {
+			return InitResult{}, fmt.Errorf("unknown profile %q. Supported profiles: %s", opts.Profile, strings.Join(InitProfileNames(), ", "))
+		}
+		config = profile.Config
 	}
 
 	configPath := filepath.Join(configDir, "cc-bash-guard.yml")
@@ -20,7 +35,7 @@ func RunInit(env Env) (InitResult, error) {
 		return InitResult{}, err
 	}
 	if !exists {
-		if err := infra.WriteFile(configPath, []byte(starterConfig), 0o644); err != nil {
+		if err := infra.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			return InitResult{}, err
 		}
 		created = true
@@ -35,6 +50,7 @@ func RunInit(env Env) (InitResult, error) {
 	return InitResult{
 		ConfigPath:             configPath,
 		Created:                created,
+		Profile:                opts.Profile,
 		ClaudeSettingsPath:     claudeSettings,
 		ClaudeSettingsDetected: settingsDetected,
 		HookSnippet:            `{"matcher":"Bash","hooks":[{"type":"command","command":"cc-bash-guard hook"}]}`,

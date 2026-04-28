@@ -2900,6 +2900,128 @@ func TestRunInitCreatesStarterConfig(t *testing.T) {
 	}
 }
 
+func TestRunInitListProfiles(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"init", "--list-profiles"}, Streams{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: t.TempDir()})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"balanced", "strict", "git-safe", "aws-k8s", "argocd"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunInitProfileCreatesExpectedConfig(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"init", "--profile", "git-safe"}, Streams{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: dir, Home: home})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".config", "cc-bash-guard", "cc-bash-guard.yml"))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	config := string(data)
+	for _, want := range []string{
+		"name: git read-only",
+		"semantic:",
+		"verb_in:",
+		"git push --force origin main",
+		"test:",
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("config missing %q:\n%s", want, config)
+		}
+	}
+	if !strings.Contains(stdout.String(), "profile: git-safe") {
+		t.Fatalf("stdout missing profile:\n%s", stdout.String())
+	}
+}
+
+func TestRunInitUnknownProfileFailsWithSupportedList(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"init", "--profile", "unknown"}, Streams{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: t.TempDir()})
+	if code == 0 {
+		t.Fatalf("code = 0 stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	errOut := stderr.String()
+	for _, want := range []string{`unknown profile "unknown"`, "Supported profiles:", "balanced", "git-safe", "argocd"} {
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("stderr missing %q:\n%s", want, errOut)
+		}
+	}
+}
+
+func TestRunInitProfileDoesNotOverwriteExistingConfig(t *testing.T) {
+	home := t.TempDir()
+	existing := "permission:\n  deny: []\n"
+	writeUserConfig(t, home, existing)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"init", "--profile", "git-safe"}, Streams{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}, Env{Cwd: t.TempDir(), Home: home})
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".config", "cc-bash-guard", "cc-bash-guard.yml"))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if string(data) != existing {
+		t.Fatalf("config overwritten:\n%s", string(data))
+	}
+	if !strings.Contains(stdout.String(), "profile not applied because the config file already exists") {
+		t.Fatalf("stdout missing not-applied message:\n%s", stdout.String())
+	}
+}
+
+func TestRunInitProfilesVerify(t *testing.T) {
+	for _, profile := range []string{"balanced", "strict", "git-safe", "aws-k8s", "argocd"} {
+		t.Run(profile, func(t *testing.T) {
+			dir := t.TempDir()
+			home := t.TempDir()
+			var initStdout, initStderr bytes.Buffer
+			code := Run([]string{"init", "--profile", profile}, Streams{
+				Stdin:  strings.NewReader(""),
+				Stdout: &initStdout,
+				Stderr: &initStderr,
+			}, Env{Cwd: dir, Home: home})
+			if code != 0 {
+				t.Fatalf("init code = %d stderr=%s", code, initStderr.String())
+			}
+
+			var verifyStdout, verifyStderr bytes.Buffer
+			code = Run([]string{"verify"}, Streams{
+				Stdin:  strings.NewReader(""),
+				Stdout: &verifyStdout,
+				Stderr: &verifyStderr,
+			}, Env{Cwd: dir, Home: home})
+			if code != 0 {
+				t.Fatalf("verify code = %d stdout=%s stderr=%s", code, verifyStdout.String(), verifyStderr.String())
+			}
+		})
+	}
+}
+
 func hasANSI(s string) bool {
 	return strings.Contains(s, "\x1b[")
 }

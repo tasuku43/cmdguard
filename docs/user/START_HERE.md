@@ -16,7 +16,8 @@ at:
 Quick commands:
 
 ```sh
-cc-bash-guard init
+cc-bash-guard init --list-profiles
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 cc-bash-guard doctor
 cc-bash-guard help permission

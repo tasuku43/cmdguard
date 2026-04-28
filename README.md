@@ -113,7 +113,7 @@ Homebrew:
 ```sh
 brew tap tasuku43/cc-bash-guard
 brew install cc-bash-guard
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 ```
 
@@ -121,13 +121,15 @@ mise:
 
 ```sh
 mise use -g github:tasuku43/cc-bash-guard@latest
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 cc-bash-guard verify
 ```
 
 `init` creates the user config if needed and prints the Claude Code hook
-snippet. `verify` validates the effective policy, runs configured examples, and
-writes the verified artifact used by the hook.
+snippet. Use `cc-bash-guard init --list-profiles` to see starter profiles such
+as `balanced`, `strict`, `git-safe`, `aws-k8s`, and `argocd`. `verify`
+validates the effective policy, runs configured examples, and writes the
+verified artifact used by the hook.
 
 For manual GitHub Releases installs, checksum verification, and Go toolchain
 builds, see [`INSTALL.md`](INSTALL.md).
@@ -158,7 +160,7 @@ inspect the parsed command and matched rule, then refine the policy until the
 examples pass.
 
 ```sh
-cc-bash-guard init
+cc-bash-guard init --profile git-safe
 $EDITOR ~/.config/cc-bash-guard/cc-bash-guard.yml
 cc-bash-guard verify
 cc-bash-guard explain "git push --force origin main"
@@ -469,6 +471,8 @@ Useful commands:
 
 ```sh
 cc-bash-guard init
+cc-bash-guard init --profile git-safe
+cc-bash-guard init --list-profiles
 cc-bash-guard verify
 cc-bash-guard explain "git status"
 cc-bash-guard doctor
