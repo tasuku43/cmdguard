@@ -1,0 +1,37 @@
+permission:
+  allow:
+    - name: AWS identity
+      command:
+        name: aws
+        semantic:
+          service: sts
+          operation: get-caller-identity
+      env:
+        requires:
+          - AWS_PROFILE
+      message: "allow AWS identity check"
+      test:
+        allow:
+          - "AWS_PROFILE=dev aws sts get-caller-identity"
+        abstain:
+          - "aws sts get-caller-identity"
+
+  ask:
+    - name: AWS production profile
+      command:
+        name: aws
+        semantic:
+          profile: prod
+      message: "AWS prod profile requires confirmation"
+      test:
+        ask:
+          - "aws --profile prod sts get-caller-identity"
+        abstain:
+          - "aws --profile dev sts get-caller-identity"
+
+test:
+  allow:
+    - "AWS_PROFILE=dev aws sts get-caller-identity"
+  ask:
+    - "aws sts get-caller-identity"
+    - "aws --profile prod sts get-caller-identity"

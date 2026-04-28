@@ -1,0 +1,24 @@
+permission:
+  allow:
+    - name: git status
+      command:
+        name: git
+        semantic:
+          verb: status
+      message: "allow git status"
+      test:
+        allow:
+          - "git status"
+        abstain:
+          - "git push --force origin main"
+
+test:
+  allow:
+    - "git status"
+    - "/usr/bin/git status"
+    - "bash -c 'git status'"
+    - "env bash -c 'git status'"
+    - "command git status"
+    - "git -C repo status"
+  ask:
+    - "git push --force origin main"

@@ -1,0 +1,42 @@
+permission:
+  deny:
+    - name: git force push
+      command:
+        name: git
+        semantic:
+          verb: push
+          force: true
+      message: "force push is blocked"
+      test:
+        deny:
+          - "git push --force origin main"
+        abstain:
+          - "git push origin main"
+
+  allow:
+    - name: git read-only
+      command:
+        name: git
+        semantic:
+          verb_in:
+            - status
+            - diff
+            - log
+            - show
+      message: "allow git read-only"
+      test:
+        allow:
+          - "git status"
+          - "git diff --cached"
+        abstain:
+          - "git push origin main"
+
+test:
+  allow:
+    - "git status"
+    - "git diff --cached"
+    - "bash -c 'git log --oneline'"
+  ask:
+    - "git push origin main"
+  deny:
+    - "git push --force origin main"

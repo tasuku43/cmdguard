@@ -1,56 +1,37 @@
 # Quickstart
 
-`cc-bash-guard` evaluates Bash commands against permission policy and returns
-`allow`, `ask`, or `deny` for Claude Code hooks. Policy evaluation and the
-default hook never rewrite commands.
-Read `docs/user/THREAT_MODEL.md` for the security boundary and known
-limitations before relying on broad allow rules.
+`cc-bash-guard` is policy-as-code for Claude Code Bash permissions. It evaluates
+Bash commands against YAML policy and returns `allow`, `ask`, or `deny`.
+Default policy evaluation never rewrites commands; parser-backed normalization
+is evaluation-only.
 
-## Install And Initialize
+## Install
 
-Install from Go when you have a working Go 1.25 or newer toolchain:
-
-```sh
-go install github.com/tasuku43/cc-bash-guard/cmd/cc-bash-guard@latest
-```
-
-Make sure your Go install directory is on `PATH`; by default that is usually
-`$(go env GOPATH)/bin`.
-
-Prebuilt GitHub Releases archives are also configured for macOS and Linux on
-arm64 and amd64. Pick the archive for your platform, verify it with
-`checksums.txt`, then place the binary on `PATH`:
+Homebrew:
 
 ```sh
-TAG=v0.1.1      # replace with the release tag you want
-OS=macos        # macos or linux
-ARCH=arm64      # arm64 or x64
-ARCHIVE="cc-bash-guard_${TAG}_${OS}_${ARCH}.tar.gz"
-
-curl -LO "https://github.com/tasuku43/cc-bash-guard/releases/download/${TAG}/${ARCHIVE}"
-curl -LO "https://github.com/tasuku43/cc-bash-guard/releases/download/${TAG}/checksums.txt"
-
-# macOS:
-grep "  ${ARCHIVE}$" checksums.txt | shasum -a 256 -c -
-
-# Linux:
-grep "  ${ARCHIVE}$" checksums.txt | sha256sum -c -
-
-mkdir -p "$HOME/.local/bin"
-tar -xzf "$ARCHIVE" cc-bash-guard
-install -m 0755 cc-bash-guard "$HOME/.local/bin/cc-bash-guard"
+brew tap tasuku43/cc-bash-guard
+brew install cc-bash-guard
+cc-bash-guard init
+cc-bash-guard verify
 ```
 
-Check the installed binary:
+mise:
+
+```sh
+mise use -g github:tasuku43/cc-bash-guard@latest
+cc-bash-guard init
+cc-bash-guard verify
+```
+
+For manual GitHub Releases installs, checksum verification, and source builds,
+see `INSTALL.md`.
+
+## Initialize
 
 ```sh
 cc-bash-guard version
 cc-bash-guard doctor
-```
-
-Create the user config and print the Claude Code hook snippet:
-
-```sh
 cc-bash-guard init
 ```
 
@@ -66,9 +47,9 @@ A project can also add an optional local config:
 .cc-bash-guard/cc-bash-guard.yaml
 ```
 
-## Minimal Policy
+## Minimal Semantic Policy
 
-Start with a small policy and verify it before relying on the hook.
+Start with semantic rules and test examples.
 
 ```yaml
 permission:
@@ -79,6 +60,11 @@ permission:
         semantic:
           verb: push
           force: true
+      test:
+        deny:
+          - "git push --force origin main"
+        abstain:
+          - "git push origin main"
 
   allow:
     - name: git read-only
@@ -90,11 +76,22 @@ permission:
             - diff
             - log
             - show
+      test:
+        allow:
+          - "git status"
+        abstain:
+          - "git push origin main"
 
-    - name: read-only shell basics
-      patterns:
-        - "^ls(\\s+-[A-Za-z0-9]+)?\\s+[^;&|`$()]+$"
-        - "^pwd$"
+test:
+  allow:
+    - "git status"
+    - "/usr/bin/git status"
+    - "bash -c 'git status'"
+    - "git -C repo status"
+  ask:
+    - "git push origin main"
+  deny:
+    - "git push --force origin main"
 ```
 
 ## Verify
@@ -103,6 +100,7 @@ Run verify after editing policy:
 
 ```sh
 cc-bash-guard verify
+cc-bash-guard verify --format json
 ```
 
 `verify` prints `PASS verify` with counts for loaded config files, permission
@@ -110,24 +108,8 @@ rules, tests, and artifact status. On failure it shows the source YAML file,
 expected and actual decision, why the final decision was reached, and the
 matched rule when available.
 
-For tooling, use structured output:
-
-```sh
-cc-bash-guard verify --format json
-```
-
-Human output uses `--color auto` by default. `NO_COLOR`, `TERM=dumb`, or
-`--color never` disable color.
-
-Use doctor for installation and configuration diagnostics:
-
-```sh
-cc-bash-guard doctor
-```
-
-Run `cc-bash-guard verify` again after upgrading the binary. Verified
-artifacts include an evaluation semantics version and the resolved policy
-inputs.
+Run `cc-bash-guard verify` again after upgrading the binary. Verified artifacts
+include an evaluation semantics version and the resolved policy inputs.
 
 ## Explain A Decision
 
@@ -140,8 +122,8 @@ cc-bash-guard explain --format json "git status"
 
 The output shows the parsed command, semantic fields, matched rule, rule source
 file, Claude settings contribution, and final merged decision. It uses the same
-verified artifact as the hook, so run `cc-bash-guard verify` after editing policy
-or included YAML files.
+verified artifact as the hook, so run `cc-bash-guard verify` after editing
+policy or included YAML files.
 
 ## Hook Setup
 
@@ -172,6 +154,7 @@ cc-bash-guard help troubleshoot
 
 Docs:
 
+- `docs/user/AGENTIC_POLICY_AUTHORING.md`
 - `docs/user/PERMISSION_SCHEMA.md`
 - `docs/user/THREAT_MODEL.md`
 - `docs/user/SEMANTIC_SCHEMAS.md`

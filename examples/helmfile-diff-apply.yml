@@ -1,0 +1,32 @@
+permission:
+  allow:
+    - name: helmfile diff
+      command:
+        name: helmfile
+        semantic:
+          verb: diff
+      message: "allow helmfile diff"
+      test:
+        allow:
+          - "helmfile diff"
+        abstain:
+          - "helmfile apply"
+
+  ask:
+    - name: helmfile apply
+      command:
+        name: helmfile
+        semantic:
+          verb: apply
+      message: "helmfile apply requires confirmation"
+      test:
+        ask:
+          - "helmfile apply"
+        abstain:
+          - "helmfile diff"
+
+test:
+  allow:
+    - "helmfile diff"
+  ask:
+    - "helmfile apply"

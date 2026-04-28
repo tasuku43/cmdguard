@@ -1,0 +1,40 @@
+permission:
+  ask:
+    - name: kubectl mutating operations
+      command:
+        name: kubectl
+        semantic:
+          verb_in:
+            - apply
+            - delete
+      message: "kubectl apply/delete requires confirmation"
+      test:
+        ask:
+          - "kubectl apply -f app.yaml"
+          - "kubectl delete pod app"
+        abstain:
+          - "kubectl get pods"
+
+  allow:
+    - name: kubectl read-only
+      command:
+        name: kubectl
+        semantic:
+          verb_in:
+            - get
+            - describe
+      message: "allow kubectl read-only"
+      test:
+        allow:
+          - "kubectl get pods"
+          - "kubectl describe pod app"
+        abstain:
+          - "kubectl delete pod app"
+
+test:
+  allow:
+    - "kubectl get pods"
+    - "kubectl describe pod app"
+  ask:
+    - "kubectl apply -f app.yaml"
+    - "kubectl delete pod app"

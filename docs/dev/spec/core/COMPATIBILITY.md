@@ -40,11 +40,13 @@ The implementation should favor:
 
 Planned distribution channels are:
 
-- `go install github.com/tasuku43/cc-bash-guard/cmd/cc-bash-guard@latest`
-- GitHub Releases
 - Homebrew tap
+- mise from GitHub Releases
+- GitHub Releases
+- `go install github.com/tasuku43/cc-bash-guard/cmd/cc-bash-guard@latest`
 
-Additional package managers are post-v1.
+User-facing quick-start docs should foreground Homebrew and mise. GitHub
+Releases and Go source builds remain documented as secondary paths.
 
 ## 5. Platform Stance
 

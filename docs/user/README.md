@@ -1,10 +1,14 @@
 # User Documentation
 
-`cc-bash-guard` is a security-first Bash permission guard for Claude Code hooks.
+`cc-bash-guard` is declarative, testable Bash permission policy for Claude
+Code. It is policy-as-code for Bash permissions: semantic rules, examples as
+tests, `verify`, `explain`, and verified artifacts for hook execution.
 
 Start with:
 
 - `docs/user/QUICKSTART.md`
+- `docs/user/AGENTIC_POLICY_AUTHORING.md`
+- `docs/user/EXPLAIN.md`
 - `docs/user/PERMISSION_SCHEMA.md`
 - `docs/user/THREAT_MODEL.md`
 - `docs/user/SEMANTIC_SCHEMAS.md`

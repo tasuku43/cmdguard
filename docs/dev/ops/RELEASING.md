@@ -33,7 +33,9 @@ Every release should publish:
 - artifact attestations for archives and `checksums.txt`
 
 Checksums are part of the security story for `cc-bash-guard` because users are
-trusting a binary that can rewrite commands before execution.
+trusting a binary that can allow, ask for confirmation, or deny Claude Code
+Bash execution. Default policy evaluation does not rewrite commands; `hook
+--rtk` is the explicit bridge to external RTK rewriting.
 
 GitHub Artifact Attestations provide a signed provenance record for the release
 artifacts. Consumers should be able to verify release provenance with:

@@ -1,5 +1,5 @@
 ---
-title: "Product Concept: Invocation Policy Proxy"
+title: "Product Concept: Bash Permission Policy"
 status: proposed
 date: 2026-04-22
 ---
@@ -8,95 +8,95 @@ date: 2026-04-22
 
 ## 1. Purpose
 
-This document defines the target product concept for `cc-bash-guard`.
+This document describes the product positioning for `cc-bash-guard`.
+User-facing current behavior remains defined by `README.md` and `docs/user/`.
 
-`cc-bash-guard` is a local policy proxy that:
-
-1. rewrites commands into policy-approved canonical forms
-2. evaluates permissions on those rewritten commands
+`cc-bash-guard` is declarative, testable Bash permission policy for Claude
+Code. It evaluates commands against YAML policy and returns `allow`, `ask`, or
+`deny`.
 
 ## 2. Problem
 
-In AI-assisted command execution, many operational mistakes come from invocation
-drift rather than raw capability drift.
+AI coding agents can express the same intended command in multiple shell forms.
+Prefix and wildcard permissions can miss equivalent forms or become broad
+enough to allow more than intended.
 
-Typical failures look like:
+Examples:
 
-1. the right CLI invoked with the wrong credential shape
-2. the right CLI invoked with an unsafe flag or wrapper
-3. the right CLI invoked in a way that defeats the intended permission policy
-4. a shell wrapper causing the true command shape to become opaque
+1. the right CLI invoked through an absolute path
+2. the right CLI invoked through a shell `-c` wrapper
+3. the right CLI invoked with global flags before the subcommand
+4. a raw wildcard rule covering destructive subcommands by accident
 
 Runtime permission systems often sit too low in the stack to express these
 rules clearly. They can tell that `aws`, `git`, or `kubectl` ran, but not
-whether the invocation respected the team's calling conventions.
+whether the invocation matched the intended operation.
 
 ## 3. Product Thesis
 
-`cc-bash-guard` should own both command canonicalization and permission evaluation.
+`cc-bash-guard` should be policy-as-code for Claude Code Bash permissions.
 
 The key design idea is:
 
-- users describe preferred invocation shape in one config file
-- `cc-bash-guard` rewrites commands into that shape
-- `cc-bash-guard` then decides `deny`, `ask`, or `allow`
-- hook runners consume that result rather than acting as the primary policy
-  engine
+- users describe permission policy in declarative YAML
+- semantic parsers expose command meaning for supported CLIs
+- examples are tests that must pass with `cc-bash-guard verify`
+- `cc-bash-guard explain` makes decisions inspectable
+- hook execution relies on verified artifacts
+
+Default policy evaluation does not rewrite commands. Parser-backed
+normalization is evaluation-only. Command rewriting exists only through the
+explicit `cc-bash-guard hook --rtk` bridge to external RTK rewriting.
 
 ## 4. Primary Persona
 
 **Operators of AI-agent shell execution**
 
 - run Claude Code, shell hooks, CI wrappers, or similar systems
-- want consistent invocation conventions for approved CLIs
-- want flexible local permission policy without depending on tool-specific
-  settings formats
-- need a reviewable local tool rather than ad-hoc shell glue
+- want flexible local permission policy without ad-hoc shell glue
+- want semantic command policy that can distinguish read-only and destructive
+  operations
+- need policies that humans and coding agents can test, explain, and maintain
 
 ## 5. Core Value Proposition
 
-`cc-bash-guard` should make approved commands conform to policy-approved invocation
-shape and then evaluate permissions on that canonical command.
+`cc-bash-guard` makes Claude Code Bash permissions declarative, semantic, and
+testable.
 
-That value appears in three concrete ways:
+That value appears in five concrete ways:
 
-1. **Canonicalization**
-   Rewrite valid-but-noncanonical invocations into the approved form.
-2. **Permission Evaluation**
-   Decide `deny`, `ask`, or `allow` after rewrite, using matcher power richer
-   than a simple prefix list.
-3. **Reviewability**
-   Keep invocation policy declarative, testable, and portable across runtimes.
+1. **Semantic Matching**
+   Match command meaning such as `git` verb or `aws` service and operation.
+2. **Fail-Closed Permission Evaluation**
+   Decide `deny`, `ask`, `allow`, or `abstain` without making ambiguity
+   permissive.
+3. **Test-First Policy**
+   Use YAML examples with `verify` to pin safe commands and near misses.
+4. **Explainability**
+   Inspect parse shape, semantic fields, matched rules, Claude settings, and
+   final decisions.
+5. **Verified Artifacts**
+   Use reviewed, verified effective policy at hook time.
 
 ## 6. Operating Model
 
-`cc-bash-guard` runs as a local CLI in front of command execution.
+`cc-bash-guard` runs as a local CLI in front of Claude Code Bash execution.
 
-- the caller provides a requested invocation, usually as a raw command string
-- `cc-bash-guard` parses that invocation internally
-- ordered rewrite steps canonicalize command shape
+- the caller provides a requested command string
+- `cc-bash-guard` parses that command internally
 - permission buckets are evaluated in order `deny -> ask -> allow`
+- no-match is `abstain`
+- permission sources merge as `deny > ask > allow > abstain`
+- the final fallback is `ask` when all sources abstain
 - the resulting decision is returned to the caller
 
-The mental model is closer to a local policy pipeline than to a deny-list
-filter.
+The mental model is a local permission policy layer, not a deny-list filter and
+not a command rewriting engine.
 
-## 7. Pipeline Model
-
-The target pipeline model is:
-
-- `rewrite`: transform an invocation into a canonical, policy-approved form
-- `permission.deny`: block specific rewritten command shapes
-- `permission.ask`: prompt for specific rewritten command shapes
-- `permission.allow`: auto-allow specific rewritten command shapes
-- top-level `test`: assert the full pipeline end-to-end
-
-The primary long-term behavior is still `rewrite`, but it is now paired with a
-first-class permission phase.
-
-## 8. Non-goals
+## 7. Non-Goals
 
 1. Acting as a general shell interpreter or full shell AST executor
-2. Providing arbitrary command macros or free-form text transformation
-3. Hosting policy centrally as a network control plane
-4. Replacing sandboxing or runtime isolation controls
+2. Providing malware detection
+3. Providing OS, filesystem, network, or credential sandboxing
+4. Rewriting commands in default hook mode
+5. Hosting policy centrally as a network control plane

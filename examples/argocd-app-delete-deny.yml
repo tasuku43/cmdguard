@@ -1,0 +1,47 @@
+permission:
+  deny:
+    - name: Argo CD app delete
+      command:
+        name: argocd
+        semantic:
+          verb: app delete
+      message: "Argo CD app deletion is blocked"
+      test:
+        deny:
+          - "argocd app delete my-app"
+        abstain:
+          - "argocd app get my-app"
+
+  allow:
+    - name: Argo CD app read
+      command:
+        name: argocd
+        semantic:
+          verb: app get
+      message: "allow Argo CD app get"
+      test:
+        allow:
+          - "argocd app get my-app"
+        abstain:
+          - "argocd app sync my-app"
+
+  ask:
+    - name: Argo CD app sync
+      command:
+        name: argocd
+        semantic:
+          verb: app sync
+      message: "Argo CD app sync requires confirmation"
+      test:
+        ask:
+          - "argocd app sync my-app"
+        abstain:
+          - "argocd app get my-app"
+
+test:
+  allow:
+    - "argocd app get my-app"
+  ask:
+    - "argocd app sync my-app"
+  deny:
+    - "argocd app delete my-app"

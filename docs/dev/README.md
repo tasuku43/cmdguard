@@ -12,6 +12,6 @@ architecture.
 
 ## Focus
 
-- concept: what `cc-bash-guard` is becoming
-- spec: the target rewrite-plus-permission pipeline contracts
-- code: the transitional implementation that will move toward those contracts
+- concept: product positioning and security boundaries
+- spec: implemented and proposed policy contracts, keyed by frontmatter status
+- code: current implementation; user-facing behavior should match `README.md`

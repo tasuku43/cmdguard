@@ -4,6 +4,8 @@ This page is kept as a compatibility entry point. The current user docs start
 at:
 
 - `docs/user/QUICKSTART.md`
+- `docs/user/AGENTIC_POLICY_AUTHORING.md`
+- `docs/user/EXPLAIN.md`
 - `docs/user/PERMISSION_SCHEMA.md`
 - `docs/user/THREAT_MODEL.md`
 - `docs/user/SEMANTIC_SCHEMAS.md`

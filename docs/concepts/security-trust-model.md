@@ -8,20 +8,19 @@ date: 2026-04-20
 
 ## 1. Why This Matters
 
-`cc-bash-guard` is not a passive formatter. It may rewrite commands immediately
-before execution. That makes it more security-sensitive than a typical local
-CLI.
+`cc-bash-guard` participates in the local execution trust boundary for Claude
+Code Bash tool calls. It evaluates commands against permission policy before
+Claude Code decides whether to allow, ask for confirmation, or deny execution.
 
-If a malicious change lands in the distributed binary, the risk is not limited
-to crashes or incorrect output. A compromised build could:
+Default `cc-bash-guard` policy evaluation does not rewrite commands. Parser
+normalization is evaluation-only. Rewriting is only possible through the
+explicit `cc-bash-guard hook --rtk` bridge, which delegates to external RTK
+after permission evaluation and never for `deny`.
 
-- rewrite a command into a different credential shape
-- insert unexpected wrappers or flags
-- weaken the user's downstream permission model
-- silently redirect execution into an organization-unsafe form
-
-For that reason, users should treat `cc-bash-guard` as part of their local execution
-trust boundary.
+If a malicious change lands in the distributed binary, the risk is incorrect
+permission decisions, weakened fail-closed behavior, stale artifact acceptance,
+or misleading explain/verify output. For that reason, users should treat
+`cc-bash-guard` as part of their local execution trust boundary.
 
 ## 2. Primary Threat Model
 
@@ -30,44 +29,46 @@ tampering**.
 
 This includes:
 
-1. a malicious contribution that changes rewrite behavior
+1. a malicious contribution that changes permission evaluation
 2. a compromised release process that ships different code than the reviewed
    repository state
 3. a local replacement of the expected binary after installation
+4. a change that makes parser uncertainty, stale artifacts, or unknown shell
+   shapes more permissive
 
 This document does **not** treat user-authored policy rules as the main threat.
-Dangerous local rules are still possible, but the primary security question for
-publication is whether users can trust the shipped tool itself.
+Dangerous local rules are still possible, but the primary publication question
+is whether users can trust the shipped tool itself.
 
 ## 3. Security Principles
 
 `cc-bash-guard` should follow these principles:
 
-1. **Typed rewrites only**
-   Rewrites must remain narrow, typed, and reviewable. Free-form command
-   templating or script execution should stay out of scope.
+1. **Policy-only default**
+   Default hook execution evaluates permissions and does not rewrite commands.
 2. **Deterministic behavior**
    A reviewed rule set and reviewed binary should produce predictable results.
-3. **Visible transformations**
-   Rewrites should be observable through trace data and user-visible summaries.
-4. **Minimal trust expansion**
-   `cc-bash-guard` should normalize command shape, not become a general shell macro
-   engine.
+3. **Fail closed**
+   Permission ambiguity should become `ask` or `deny`, never broad `allow`.
+4. **Explainable decisions**
+   `verify` and `explain` should expose parse shape, semantic fields, matched
+   rules, Claude settings, and final decisions.
 5. **Verifiable distribution**
    Users should be able to verify what binary they installed and what source
    revision it came from.
 
 ## 4. Required Publication Controls
 
-Before wider publication, the project should adopt the following baseline:
+Before wider publication, the project should adopt or preserve the following
+baseline:
 
 ### Repository and Review
 
 - protect the default branch
 - require PR review before merge
 - add `CODEOWNERS` for security-sensitive paths
-- treat changes in hook handling, rewrite primitives, config loading, and rule
-  evaluation as security-sensitive
+- treat changes in hook handling, parser behavior, config loading, verified
+  artifacts, and rule evaluation as security-sensitive
 
 ### Release Integrity
 
@@ -80,19 +81,11 @@ Before wider publication, the project should adopt the following baseline:
 
 - make it easy to inspect the installed binary identity
 - make it easy to inspect the hook command Claude Code is actually executing
-- keep rewrite behavior visible through trace and `systemMessage`
+- require `cc-bash-guard verify` to produce hook artifacts before default hook
+  execution trusts policy
+- keep `explain` output useful for policy review
 
-## 5. Near-term Project Work
-
-The next practical security steps are:
-
-1. add `cc-bash-guard version --build-info`
-2. add a verification command for installation and hook wiring
-3. add `CODEOWNERS` for hook, directive, policy, and config-loading paths
-4. publish checksums for release artifacts
-5. document a verified install workflow in the README
-
-## 6. Non-goals
+## 5. Non-Goals
 
 This trust model does not attempt to solve:
 
@@ -100,6 +93,7 @@ This trust model does not attempt to solve:
 - credential compromise outside `cc-bash-guard`
 - arbitrary shell escape paths that should be handled by the downstream runtime
 - centralized remote policy enforcement
+- malware detection
 
-`cc-bash-guard` should remain a local invocation policy proxy, but one that users can
-reasonably trust as part of their execution boundary.
+`cc-bash-guard` should remain a local Bash permission policy proxy that users
+can reasonably trust as part of their execution boundary.
