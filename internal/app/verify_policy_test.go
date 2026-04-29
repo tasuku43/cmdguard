@@ -106,6 +106,104 @@ func TestVerifyPolicyFailuresSemanticAllowSubsumedByBroadAllow(t *testing.T) {
 	}
 }
 
+func TestVerifyPolicyFailuresBroadAllowRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		allow   []policy.PermissionRuleSpec
+		command string
+		reason  string
+	}{
+		{
+			name:    "env only allow rejected",
+			allow:   []policy.PermissionRuleSpec{{Name: "any aws profile", Env: policy.PermissionEnvSpec{Requires: []string{"AWS_PROFILE"}}}},
+			reason:  "env-only allow",
+			command: "",
+		},
+		{
+			name:    "supported command name only rejected",
+			allow:   []policy.PermissionRuleSpec{{Name: "all git", Command: policy.PermissionCommandSpec{Name: "git"}}},
+			command: "git",
+			reason:  "command.name allows the whole git command namespace without semantic constraints",
+		},
+		{
+			name:    "name_in with supported semantic command rejected",
+			allow:   []policy.PermissionRuleSpec{{Name: "infra tools", Command: policy.PermissionCommandSpec{NameIn: []string{"ls", "kubectl", "pwd"}}}},
+			command: "kubectl",
+			reason:  "command.name_in includes supported semantic command kubectl without semantic constraints",
+		},
+		{
+			name:    "script runner command name rejected",
+			allow:   []policy.PermissionRuleSpec{{Name: "all npm", Command: policy.PermissionCommandSpec{Name: "npm"}}},
+			command: "npm",
+			reason:  "script runner or generic interpreter npm",
+		},
+		{
+			name:    "name_in with interpreter rejected",
+			allow:   []policy.PermissionRuleSpec{{Name: "shells", Command: policy.PermissionCommandSpec{NameIn: []string{"bash", "zsh"}}}},
+			command: "bash",
+			reason:  "script runner or generic interpreter bash",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diags := verifyPolicyFailures(loadedWithRules(stampAllowSources(tt.allow), nil, nil))
+			diag, ok := findDiagnostic(diags, "broad_allow_rule")
+			if !ok {
+				t.Fatalf("missing broad allow rule diagnostic; got %+v", diags)
+			}
+			if diag.Command != tt.command {
+				t.Fatalf("Command = %q, want %q", diag.Command, tt.command)
+			}
+			if !strings.Contains(diag.Reason, tt.reason) {
+				t.Fatalf("Reason = %q, want containing %q", diag.Reason, tt.reason)
+			}
+			for _, want := range []string{"semantic", "permission.ask", "narrow anchored"} {
+				if !strings.Contains(diag.Message+" "+diag.Hint+" "+diag.SaferAlternative, want) {
+					t.Fatalf("diagnostic missing %q: %+v", want, diag)
+				}
+			}
+		})
+	}
+}
+
+func TestVerifyPolicyFailuresBroadAllowPatternRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+	}{
+		{name: "unanchored allow regex rejected", pattern: `git\s+status`},
+		{name: "wildcard crossing shell metacharacters rejected", pattern: `^git\s+status.*$`},
+		{name: "whole git namespace rejected", pattern: `^git\s+.*$`},
+		{name: "whole aws namespace rejected", pattern: `^aws\s+.*$`},
+		{name: "whole kubectl namespace rejected", pattern: `^kubectl\s+.*$`},
+		{name: "whole terraform namespace rejected", pattern: `^terraform\s+.*$`},
+		{name: "whole docker namespace rejected", pattern: `^docker\s+.*$`},
+		{name: "script runner namespace rejected", pattern: `^npm\s+.*$`},
+		{name: "interpreter namespace rejected", pattern: `^python3\s+.*$`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diags := verifyPolicyFailures(loadedWithRules(stampAllowSources([]policy.PermissionRuleSpec{
+				{Name: tt.name, Patterns: []string{tt.pattern}},
+			}), nil, nil))
+			diag, ok := findDiagnostic(diags, "broad_allow_pattern")
+			if !ok {
+				t.Fatalf("missing broad allow pattern diagnostic; got %+v", diags)
+			}
+			if diag.Pattern != tt.pattern {
+				t.Fatalf("Pattern = %q, want %q", diag.Pattern, tt.pattern)
+			}
+			for _, want := range []string{"narrower regex", "anchored", "shell metacharacters"} {
+				if !strings.Contains(diag.Message+" "+diag.Hint+" "+diag.SaferAlternative, want) {
+					t.Fatalf("diagnostic missing %q: %+v", want, diag)
+				}
+			}
+		})
+	}
+}
+
 func TestVerifyPolicyFailuresSemanticAllowSubsumptionNonFailures(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -141,7 +239,16 @@ func TestVerifyPolicyFailuresSemanticAllowSubsumptionNonFailures(t *testing.T) {
 			name: "semantic kubectl allow plus docker command allow",
 			allow: []policy.PermissionRuleSpec{
 				{Name: "kubectl get", Command: policy.PermissionCommandSpec{Name: "kubectl", Semantic: &policy.SemanticMatchSpec{Verb: "get"}}},
-				{Name: "docker", Command: policy.PermissionCommandSpec{Name: "docker"}},
+				{Name: "docker ps", Command: policy.PermissionCommandSpec{Name: "docker", Semantic: &policy.SemanticMatchSpec{Verb: "ps"}}},
+			},
+		},
+		{
+			name: "deny and ask broad rules remain allowed",
+			deny: []policy.PermissionRuleSpec{{Name: "deny all git", Command: policy.PermissionCommandSpec{Name: "git"}}},
+			ask:  []policy.PermissionRuleSpec{{Name: "ask all npm", Command: policy.PermissionCommandSpec{Name: "npm"}}},
+			allow: []policy.PermissionRuleSpec{
+				{Name: "git status", Command: policy.PermissionCommandSpec{Name: "git", Semantic: &policy.SemanticMatchSpec{Verb: "status"}}},
+				{Name: "npm version", Patterns: []string{`^npm\s+--version$`}},
 			},
 		},
 	}
@@ -149,8 +256,10 @@ func TestVerifyPolicyFailuresSemanticAllowSubsumptionNonFailures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			diags := verifyPolicyFailures(loadedWithRules(stampAllowSources(tt.allow), stampRules(tt.ask, "ask"), stampRules(tt.deny, "deny")))
-			if _, ok := findDiagnostic(diags, "semantic_allow_subsumed_by_broad_allow"); ok {
-				t.Fatalf("unexpected semantic subsumption diagnostic: %+v", diags)
+			for _, kind := range []string{"semantic_allow_subsumed_by_broad_allow", "broad_allow_rule", "broad_allow_pattern"} {
+				if _, ok := findDiagnostic(diags, kind); ok {
+					t.Fatalf("unexpected %s diagnostic: %+v", kind, diags)
+				}
 			}
 		})
 	}

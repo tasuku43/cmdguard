@@ -409,11 +409,14 @@ Avoid broad allow regexes such as `.*`, `^aws\\s+`, `^terraform\\s+`, or
 regex is unanchored, allows a whole command namespace, or uses wildcards that
 can cross shell metacharacters.
 
-If a supported command has a semantic allow rule, `verify` also fails broader
-allow rules for the same command, such as `command.name: git`, `command.name_in`
-containing `git`, `^git\\s+.*$`, or an env-only allow. Move broad command
-namespace handling to `permission.ask` and keep `permission.allow` semantic and
-narrow.
+Semantic allow can be weakened by another broad allow rule in the same
+effective policy. To keep `permission.allow` meaningful, `verify` rejects broad
+allow rules by default: `command.name: git`, `command.name_in` containing
+supported semantic commands, env-only allow rules, whole command namespace
+patterns such as `^git\\s+.*$`, and broad script runner or interpreter allows
+such as `bash`, `python3`, `npm`, or `make`. Move broad command namespace
+handling to `permission.ask` and keep `permission.allow` semantic, narrow, and
+covered by anchored fallback pattern tests where raw patterns are needed.
 
 ### Environment Requirements
 

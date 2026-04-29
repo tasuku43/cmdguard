@@ -126,10 +126,64 @@ func verifyFailures(loaded configrepo.Loaded, tool string, cwd string, home stri
 func verifyPolicyFailures(loaded configrepo.Loaded) []VerifyDiagnostic {
 	var failures []VerifyDiagnostic
 	for _, rule := range loaded.Pipeline.Permission.Allow {
+		failures = append(failures, broadAllowRuleFailures(rule)...)
 		failures = append(failures, broadAllowPatternFailures(rule)...)
 	}
 	failures = append(failures, semanticAllowSubsumptionFailures(loaded.Pipeline.Permission.Allow)...)
 	return failures
+}
+
+func broadAllowRuleFailures(rule policy.PermissionRuleSpec) []VerifyDiagnostic {
+	var failures []VerifyDiagnostic
+	if policy.IsZeroPermissionCommandSpec(rule.Command) && len(rule.Patterns) == 0 && !policy.IsZeroPermissionEnvSpec(rule.Env) {
+		failures = append(failures, broadAllowRuleFailure(rule, "", "env-only allow can allow any command when the environment matches"))
+	}
+	if cmd := strings.TrimSpace(rule.Command.Name); cmd != "" && rule.Command.Semantic == nil {
+		if _, ok := semanticpkg.Lookup(cmd); ok {
+			failures = append(failures, broadAllowRuleFailure(rule, cmd, "command.name allows the whole "+cmd+" command namespace without semantic constraints"))
+		} else if isScriptRunnerOrInterpreter(cmd) {
+			failures = append(failures, broadAllowRuleFailure(rule, cmd, "command.name allows script runner or generic interpreter "+cmd+" without a narrow semantic or pattern constraint"))
+		}
+	}
+	if len(rule.Command.NameIn) > 0 && rule.Command.Semantic == nil {
+		for _, name := range rule.Command.NameIn {
+			cmd := strings.TrimSpace(name)
+			if cmd == "" {
+				continue
+			}
+			if _, ok := semanticpkg.Lookup(cmd); ok {
+				failures = append(failures, broadAllowRuleFailure(rule, cmd, "command.name_in includes supported semantic command "+cmd+" without semantic constraints"))
+				continue
+			}
+			if isScriptRunnerOrInterpreter(cmd) {
+				failures = append(failures, broadAllowRuleFailure(rule, cmd, "command.name_in includes script runner or generic interpreter "+cmd+" without a narrow pattern constraint"))
+			}
+		}
+	}
+	return failures
+}
+
+func broadAllowRuleFailure(rule policy.PermissionRuleSpec, cmd string, reason string) VerifyDiagnostic {
+	return VerifyDiagnostic{
+		Kind:             "broad_allow_rule",
+		Title:            "Broad allow rule",
+		Source:           sourceFromPolicy(rule.Source, rule.Name),
+		Command:          cmd,
+		Message:          "permission.allow rule is broad: " + reason,
+		Reason:           reason,
+		Hint:             "Prefer semantic allow rules for supported commands, move broad command namespace handling to permission.ask, and use narrow anchored tests for fallback patterns.",
+		SaferAlternative: broadAllowRuleAlternative(cmd),
+	}
+}
+
+func broadAllowRuleAlternative(cmd string) string {
+	if cmd == "" {
+		return "Add command.name plus command.semantic for supported commands, or move this rule to permission.ask."
+	}
+	if _, supported := semanticpkg.Lookup(cmd); supported {
+		return "Use command.semantic for " + cmd + " or move the broad namespace rule to permission.ask."
+	}
+	return "Use a narrow anchored pattern for the exact safe invocation, or move this rule to permission.ask."
 }
 
 func semanticAllowSubsumptionFailures(rules []policy.PermissionRuleSpec) []VerifyDiagnostic {
@@ -311,7 +365,16 @@ func broadCommandPrefixPattern(pattern string) (string, bool) {
 }
 
 func broadPatternCommands() []string {
-	return []string{"git", "aws", "kubectl", "gh", "gws", "helm", "helmfile", "argocd", "terraform", "docker", "npm", "make"}
+	return []string{"git", "aws", "kubectl", "gh", "gws", "helm", "helmfile", "argocd", "terraform", "docker", "bash", "sh", "zsh", "python", "python3", "node", "ruby", "perl", "make", "npm", "yarn", "pnpm", "npx", "xargs", "ssh"}
+}
+
+func isScriptRunnerOrInterpreter(cmd string) bool {
+	switch cmd {
+	case "bash", "sh", "zsh", "python", "python3", "node", "ruby", "perl", "make", "npm", "yarn", "pnpm", "npx", "xargs", "ssh":
+		return true
+	default:
+		return false
+	}
 }
 
 func trimLeadingRegexWhitespace(pattern string) string {
@@ -357,7 +420,7 @@ func broadShellMetacharPattern(pattern string) bool {
 func saferPatternHint(pattern string) string {
 	if cmd, ok := anchoredCommandName(pattern); ok {
 		if _, supported := semanticpkg.Lookup(cmd); supported {
-			return "Prefer permission.allow.command with command.name: " + cmd + " and command.semantic fields for the intended read-only operation."
+			return "Prefer permission.allow.command with command.name: " + cmd + " and command.semantic fields for the intended read-only operation; if a raw fallback is required, use a narrower regex anchored with ^ and $ that excludes shell metacharacters."
 		}
 	}
 	return "Use a narrower regex anchored with ^ and $, include an explicit subcommand, and exclude shell metacharacters where raw patterns are required."
