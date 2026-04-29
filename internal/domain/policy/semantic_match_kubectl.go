@@ -4,6 +4,14 @@ import (
 	commandpkg "github.com/tasuku43/cc-bash-guard/internal/domain/command"
 )
 
+func init() {
+	registerSemanticHandler(semanticHandler{
+		command:  "kubectl",
+		match:    func(s SemanticMatchSpec, cmd commandpkg.Command) bool { return s.Kubectl().matches(cmd) },
+		validate: ValidateKubectlSemanticMatchSpec,
+	})
+}
+
 func (s KubectlSemanticSpec) matches(cmd commandpkg.Command) bool {
 	if cmd.SemanticParser != "kubectl" || cmd.Kubectl == nil {
 		return false

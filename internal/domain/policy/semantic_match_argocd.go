@@ -4,6 +4,14 @@ import (
 	commandpkg "github.com/tasuku43/cc-bash-guard/internal/domain/command"
 )
 
+func init() {
+	registerSemanticHandler(semanticHandler{
+		command:  "argocd",
+		match:    func(s SemanticMatchSpec, cmd commandpkg.Command) bool { return s.ArgoCD().matches(cmd) },
+		validate: ValidateArgoCDSemanticMatchSpec,
+	})
+}
+
 func (s ArgoCDSemanticSpec) matches(cmd commandpkg.Command) bool {
 	if cmd.SemanticParser != "argocd" || cmd.ArgoCD == nil {
 		return false

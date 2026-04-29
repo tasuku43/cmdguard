@@ -1,0 +1,91 @@
+permission:
+  ask:
+    - name: docker run containers
+      command:
+        name: docker
+        semantic:
+          verb: run
+      test:
+        ask:
+          - "docker run --rm alpine echo hello"
+        abstain:
+          - "docker ps"
+
+    - name: docker compose mutating commands
+      command:
+        name: docker
+        semantic:
+          verb: compose
+          compose_command_in:
+            - up
+            - run
+            - exec
+      test:
+        ask:
+          - "docker compose up -d"
+          - "docker compose run --rm web bash"
+
+  deny:
+    - name: docker privileged containers
+      command:
+        name: docker
+        semantic:
+          verb: run
+          privileged: true
+      test:
+        deny:
+          - "docker run --privileged alpine"
+        abstain:
+          - "docker run --rm alpine echo hello"
+
+    - name: docker host namespace flags
+      command:
+        name: docker
+        semantic:
+          network_host: true
+      test:
+        deny:
+          - "docker run --network host alpine"
+
+    - name: docker socket mount
+      command:
+        name: docker
+        semantic:
+          docker_socket_mount: true
+      test:
+        deny:
+          - "docker run -v /var/run/docker.sock:/var/run/docker.sock alpine"
+        abstain:
+          - "docker run -v ./data:/data alpine"
+
+    - name: docker root host mount
+      command:
+        name: docker
+        semantic:
+          root_mount: true
+      test:
+        deny:
+          - "docker run -v /:/host alpine"
+
+    - name: docker destructive prune
+      command:
+        name: docker
+        semantic:
+          verb: system
+          subverb: prune
+          all_resources: true
+          volumes_flag: true
+      test:
+        deny:
+          - "docker system prune -a --volumes"
+
+    - name: docker compose down volumes
+      command:
+        name: docker
+        semantic:
+          verb: compose
+          compose_command: down
+          volumes_flag: true
+      test:
+        deny:
+          - "docker compose down --volumes"

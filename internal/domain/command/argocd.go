@@ -4,6 +4,10 @@ import "strings"
 
 type ArgoCDParser struct{}
 
+func init() {
+	RegisterDefaultParser(ArgoCDParser{})
+}
+
 func (ArgoCDParser) Program() string {
 	return "argocd"
 }

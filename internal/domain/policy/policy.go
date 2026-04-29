@@ -1114,27 +1114,6 @@ func permissionEnvMatches(env PermissionEnvSpec, cmd commandpkg.Command) bool {
 	return true
 }
 
-func permissionSemanticMatches(command string, semantic SemanticMatchSpec, cmd commandpkg.Command) bool {
-	switch strings.TrimSpace(command) {
-	case "git":
-		return semantic.Git().matches(cmd)
-	case "aws":
-		return semantic.AWS().matches(cmd)
-	case "kubectl":
-		return semantic.Kubectl().matches(cmd)
-	case "gh":
-		return semantic.GH().matches(cmd)
-	case "gws":
-		return semantic.Gws().matches(cmd)
-	case "helmfile":
-		return semantic.Helmfile().matches(cmd)
-	case "argocd":
-		return semantic.ArgoCD().matches(cmd)
-	default:
-		return false
-	}
-}
-
 func permissionPredicateSummary(rule PermissionRuleSpec) string {
 	var groups []string
 	if strings.TrimSpace(rule.Command.Name) != "" || len(rule.Command.NameIn) > 0 {
@@ -1443,36 +1422,7 @@ func (m MatchSpec) matches(cmd commandpkg.Command) bool {
 		}
 	}
 	if m.Semantic != nil {
-		switch m.Command {
-		case "git":
-			if !m.Semantic.Git().matches(cmd) {
-				return false
-			}
-		case "aws":
-			if !m.Semantic.AWS().matches(cmd) {
-				return false
-			}
-		case "kubectl":
-			if !m.Semantic.Kubectl().matches(cmd) {
-				return false
-			}
-		case "gh":
-			if !m.Semantic.GH().matches(cmd) {
-				return false
-			}
-		case "gws":
-			if !m.Semantic.Gws().matches(cmd) {
-				return false
-			}
-		case "helmfile":
-			if !m.Semantic.Helmfile().matches(cmd) {
-				return false
-			}
-		case "argocd":
-			if !m.Semantic.ArgoCD().matches(cmd) {
-				return false
-			}
-		default:
+		if !permissionSemanticMatches(m.Command, *m.Semantic, cmd) {
 			return false
 		}
 	}
@@ -1599,22 +1549,7 @@ func ValidatePermissionCommandSpec(prefix string, command PermissionCommandSpec)
 				issues = append(issues, unsupportedSemanticFieldIssue(prefix, name, field))
 			}
 		}
-		switch name {
-		case "git":
-			issues = append(issues, ValidateGitSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
-		case "aws":
-			issues = append(issues, ValidateAWSSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
-		case "kubectl":
-			issues = append(issues, ValidateKubectlSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
-		case "gh":
-			issues = append(issues, ValidateGhSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
-		case "gws":
-			issues = append(issues, ValidateGwsSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
-		case "helmfile":
-			issues = append(issues, ValidateHelmfileSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
-		case "argocd":
-			issues = append(issues, ValidateArgoCDSemanticMatchSpec(prefix+".semantic", *command.Semantic)...)
-		}
+		issues = append(issues, validateSemanticMatchSpec(name, prefix+".semantic", *command.Semantic)...)
 	}
 	return issues
 }
@@ -1703,23 +1638,7 @@ func validateMatchSpec(prefix string, match MatchSpec, allowSemantic bool) []str
 				issues = append(issues, unsupportedSemanticFieldIssue(prefix, match.Command, field))
 			}
 		}
-		switch match.Command {
-		case "git":
-			issues = append(issues, ValidateGitSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
-		case "aws":
-			issues = append(issues, ValidateAWSSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
-		case "kubectl":
-			issues = append(issues, ValidateKubectlSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
-		case "gh":
-			issues = append(issues, ValidateGhSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
-		case "gws":
-			issues = append(issues, ValidateGwsSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
-		case "helmfile":
-			issues = append(issues, ValidateHelmfileSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
-		case "argocd":
-			issues = append(issues, ValidateArgoCDSemanticMatchSpec(prefix+".semantic", *match.Semantic)...)
-		case "":
-		}
+		issues = append(issues, validateSemanticMatchSpec(match.Command, prefix+".semantic", *match.Semantic)...)
 	}
 	return issues
 }

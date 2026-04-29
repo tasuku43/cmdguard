@@ -4,6 +4,14 @@ import (
 	commandpkg "github.com/tasuku43/cc-bash-guard/internal/domain/command"
 )
 
+func init() {
+	registerSemanticHandler(semanticHandler{
+		command:  "gws",
+		match:    func(s SemanticMatchSpec, cmd commandpkg.Command) bool { return s.Gws().matches(cmd) },
+		validate: ValidateGwsSemanticMatchSpec,
+	})
+}
+
 func (s GwsSemanticSpec) matches(cmd commandpkg.Command) bool {
 	if cmd.SemanticParser != "gws" || cmd.Gws == nil {
 		return false

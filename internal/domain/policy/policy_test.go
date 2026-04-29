@@ -73,6 +73,55 @@ func TestEvaluateGwsSemanticRules(t *testing.T) {
 	}
 }
 
+func TestEvaluateHelmSemanticRules(t *testing.T) {
+	trueValue := true
+	p := Pipeline{
+		PipelineSpec: PipelineSpec{
+			Permission: PermissionSpec{
+				Deny: []PermissionRuleSpec{
+					{Command: PermissionCommandSpec{Name: "helm", Semantic: &SemanticMatchSpec{Verb: "uninstall"}}},
+					{Command: PermissionCommandSpec{Name: "helm", Semantic: &SemanticMatchSpec{Verb: "plugin", SubverbIn: []string{"install", "update", "uninstall"}}}},
+				},
+				Ask: []PermissionRuleSpec{
+					{Command: PermissionCommandSpec{Name: "helm", Semantic: &SemanticMatchSpec{VerbIn: []string{"install", "upgrade"}}}},
+					{Command: PermissionCommandSpec{Name: "helm", Semantic: &SemanticMatchSpec{Verb: "upgrade", Install: &trueValue}}},
+					{Command: PermissionCommandSpec{Name: "helm", Semantic: &SemanticMatchSpec{Verb: "upgrade", Force: &trueValue}}},
+				},
+				Allow: []PermissionRuleSpec{
+					{Command: PermissionCommandSpec{Name: "helm", Semantic: &SemanticMatchSpec{VerbIn: []string{"list", "status", "history", "get", "show", "search", "template", "lint"}}}},
+					{Command: PermissionCommandSpec{Name: "helm", Semantic: &SemanticMatchSpec{Verb: "status", Namespace: "prod", KubeContext: "prod-cluster"}}},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		command string
+		want    string
+	}{
+		{command: "helm list -n default", want: "allow"},
+		{command: "helm status my-release -n prod --kube-context prod-cluster", want: "allow"},
+		{command: "helm upgrade my-release ./chart -n prod", want: "ask"},
+		{command: "helm install my-release ./chart -n prod", want: "ask"},
+		{command: "helm upgrade my-release ./chart --install -n prod", want: "ask"},
+		{command: "helm upgrade my-release ./chart --force -n prod", want: "ask"},
+		{command: "helm uninstall my-release -n prod", want: "deny"},
+		{command: "helm plugin install https://example.com/plugin.git", want: "deny"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			got, err := Evaluate(p, tt.command)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if got.Outcome != tt.want {
+				t.Fatalf("Outcome = %q, want %q; decision=%+v", got.Outcome, tt.want, got)
+			}
+		})
+	}
+}
+
 func TestEvaluatePermissionUsesOriginalCommandForRawPatterns(t *testing.T) {
 	p := NewPipeline(PipelineSpec{
 		Permission: PermissionSpec{

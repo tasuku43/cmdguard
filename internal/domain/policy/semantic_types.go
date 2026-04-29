@@ -37,6 +37,7 @@ type SemanticMatchSpec struct {
 	ResourceTypeIn                   []string `yaml:"resource_type_in" json:"resource_type_in,omitempty"`
 	ResourceName                     string   `yaml:"resource_name" json:"resource_name,omitempty"`
 	ResourceNameIn                   []string `yaml:"resource_name_in" json:"resource_name_in,omitempty"`
+	Release                          string   `yaml:"release" json:"release,omitempty"`
 	Namespace                        string   `yaml:"namespace" json:"namespace,omitempty"`
 	NamespaceIn                      []string `yaml:"namespace_in" json:"namespace_in,omitempty"`
 	NamespaceMissing                 *bool    `yaml:"namespace_missing" json:"namespace_missing,omitempty"`
@@ -62,6 +63,28 @@ type SemanticMatchSpec struct {
 	KubeContext                      string   `yaml:"kube_context" json:"kube_context,omitempty"`
 	KubeContextIn                    []string `yaml:"kube_context_in" json:"kube_context_in,omitempty"`
 	KubeContextMissing               *bool    `yaml:"kube_context_missing" json:"kube_context_missing,omitempty"`
+	Chart                            string   `yaml:"chart" json:"chart,omitempty"`
+	ChartIn                          []string `yaml:"chart_in" json:"chart_in,omitempty"`
+	Install                          *bool    `yaml:"install" json:"install,omitempty"`
+	ReuseValues                      *bool    `yaml:"reuse_values" json:"reuse_values,omitempty"`
+	ResetValues                      *bool    `yaml:"reset_values" json:"reset_values,omitempty"`
+	ResetThenReuseValues             *bool    `yaml:"reset_then_reuse_values" json:"reset_then_reuse_values,omitempty"`
+	Atomic                           *bool    `yaml:"atomic" json:"atomic,omitempty"`
+	CleanupOnFail                    *bool    `yaml:"cleanup_on_fail" json:"cleanup_on_fail,omitempty"`
+	CreateNamespace                  *bool    `yaml:"create_namespace" json:"create_namespace,omitempty"`
+	DependencyUpdate                 *bool    `yaml:"dependency_update" json:"dependency_update,omitempty"`
+	Devel                            *bool    `yaml:"devel" json:"devel,omitempty"`
+	KeepHistory                      *bool    `yaml:"keep_history" json:"keep_history,omitempty"`
+	ValuesFile                       string   `yaml:"values_file" json:"values_file,omitempty"`
+	ValuesFileIn                     []string `yaml:"values_file_in" json:"values_file_in,omitempty"`
+	ValuesFilesContains              []string `yaml:"values_files" json:"values_files,omitempty"`
+	SetKeysContains                  []string `yaml:"set_keys_contains" json:"set_keys_contains,omitempty"`
+	SetStringKeysContains            []string `yaml:"set_string_keys_contains" json:"set_string_keys_contains,omitempty"`
+	SetFileKeysContains              []string `yaml:"set_file_keys_contains" json:"set_file_keys_contains,omitempty"`
+	RepoName                         string   `yaml:"repo_name" json:"repo_name,omitempty"`
+	RepoURL                          string   `yaml:"repo_url" json:"repo_url,omitempty"`
+	Registry                         string   `yaml:"registry" json:"registry,omitempty"`
+	PluginName                       string   `yaml:"plugin_name" json:"plugin_name,omitempty"`
 	Interactive                      *bool    `yaml:"interactive" json:"interactive,omitempty"`
 	Wait                             *bool    `yaml:"wait" json:"wait,omitempty"`
 	WaitForJobs                      *bool    `yaml:"wait_for_jobs" json:"wait_for_jobs,omitempty"`
@@ -176,6 +199,52 @@ type SemanticMatchSpec struct {
 	MigrateState                     *bool    `yaml:"migrate_state" json:"migrate_state,omitempty"`
 	Check                            *bool    `yaml:"check" json:"check,omitempty"`
 	JSON                             *bool    `yaml:"json" json:"json,omitempty"`
+	ComposeCommand                   string   `yaml:"compose_command" json:"compose_command,omitempty"`
+	ComposeCommandIn                 []string `yaml:"compose_command_in" json:"compose_command_in,omitempty"`
+	Image                            string   `yaml:"image" json:"image,omitempty"`
+	ImageIn                          []string `yaml:"image_in" json:"image_in,omitempty"`
+	Host                             string   `yaml:"host" json:"host,omitempty"`
+	HostPrefix                       string   `yaml:"host_prefix" json:"host_prefix,omitempty"`
+	ProjectName                      string   `yaml:"project_name" json:"project_name,omitempty"`
+	ProjectNameIn                    []string `yaml:"project_name_in" json:"project_name_in,omitempty"`
+	Detach                           *bool    `yaml:"detach" json:"detach,omitempty"`
+	RM                               *bool    `yaml:"rm" json:"rm,omitempty"`
+	Privileged                       *bool    `yaml:"privileged" json:"privileged,omitempty"`
+	Tty                              *bool    `yaml:"tty" json:"tty,omitempty"`
+	User                             string   `yaml:"user" json:"user,omitempty"`
+	Workdir                          string   `yaml:"workdir" json:"workdir,omitempty"`
+	Entrypoint                       string   `yaml:"entrypoint" json:"entrypoint,omitempty"`
+	Network                          string   `yaml:"network" json:"network,omitempty"`
+	NetworkHost                      *bool    `yaml:"network_host" json:"network_host,omitempty"`
+	PID                              string   `yaml:"pid" json:"pid,omitempty"`
+	PIDHost                          *bool    `yaml:"pid_host" json:"pid_host,omitempty"`
+	IPC                              string   `yaml:"ipc" json:"ipc,omitempty"`
+	IPCHost                          *bool    `yaml:"ipc_host" json:"ipc_host,omitempty"`
+	UTS                              string   `yaml:"uts" json:"uts,omitempty"`
+	UTSHost                          *bool    `yaml:"uts_host" json:"uts_host,omitempty"`
+	CapAddContains                   []string `yaml:"cap_add_contains" json:"cap_add_contains,omitempty"`
+	CapDropContains                  []string `yaml:"cap_drop_contains" json:"cap_drop_contains,omitempty"`
+	SecurityOptContains              []string `yaml:"security_opt_contains" json:"security_opt_contains,omitempty"`
+	Device                           *bool    `yaml:"device" json:"device,omitempty"`
+	DevicesContains                  []string `yaml:"devices_contains" json:"devices_contains,omitempty"`
+	MountsContains                   []string `yaml:"mounts_contains" json:"mounts_contains,omitempty"`
+	VolumesContains                  []string `yaml:"volumes_contains" json:"volumes_contains,omitempty"`
+	HostMount                        *bool    `yaml:"host_mount" json:"host_mount,omitempty"`
+	RootMount                        *bool    `yaml:"root_mount" json:"root_mount,omitempty"`
+	DockerSocketMount                *bool    `yaml:"docker_socket_mount" json:"docker_socket_mount,omitempty"`
+	EnvFilesContains                 []string `yaml:"env_files_contains" json:"env_files_contains,omitempty"`
+	EnvKeysContains                  []string `yaml:"env_keys_contains" json:"env_keys_contains,omitempty"`
+	PortsContains                    []string `yaml:"ports_contains" json:"ports_contains,omitempty"`
+	PublishAll                       *bool    `yaml:"publish_all" json:"publish_all,omitempty"`
+	Pull                             string   `yaml:"pull" json:"pull,omitempty"`
+	NoCache                          *bool    `yaml:"no_cache" json:"no_cache,omitempty"`
+	BuildArgKeysContains             []string `yaml:"build_arg_keys_contains" json:"build_arg_keys_contains,omitempty"`
+	Platform                         string   `yaml:"platform" json:"platform,omitempty"`
+	All                              *bool    `yaml:"all" json:"all,omitempty"`
+	VolumesFlag                      *bool    `yaml:"volumes_flag" json:"volumes_flag,omitempty"`
+	Prune                            *bool    `yaml:"prune" json:"prune,omitempty"`
+	AllResources                     *bool    `yaml:"all_resources" json:"all_resources,omitempty"`
+	RemoveOrphans                    *bool    `yaml:"remove_orphans" json:"remove_orphans,omitempty"`
 }
 
 type GitSemanticSpec struct {
@@ -375,6 +444,51 @@ type HelmfileSemanticSpec struct {
 	FlagsPrefixes                    []string
 }
 
+type HelmSemanticSpec struct {
+	Verb                  string
+	VerbIn                []string
+	Subverb               string
+	SubverbIn             []string
+	Release               string
+	Chart                 string
+	ChartIn               []string
+	Namespace             string
+	NamespaceIn           []string
+	NamespaceMissing      *bool
+	KubeContext           string
+	KubeContextIn         []string
+	KubeContextMissing    *bool
+	Kubeconfig            string
+	DryRun                *bool
+	Force                 *bool
+	Atomic                *bool
+	Wait                  *bool
+	WaitForJobs           *bool
+	Install               *bool
+	ReuseValues           *bool
+	ResetValues           *bool
+	ResetThenReuseValues  *bool
+	CleanupOnFail         *bool
+	CreateNamespace       *bool
+	DependencyUpdate      *bool
+	Devel                 *bool
+	KeepHistory           *bool
+	Cascade               string
+	CascadeIn             []string
+	ValuesFile            string
+	ValuesFileIn          []string
+	ValuesFilesContains   []string
+	SetKeysContains       []string
+	SetStringKeysContains []string
+	SetFileKeysContains   []string
+	RepoName              string
+	RepoURL               string
+	Registry              string
+	PluginName            string
+	FlagsContains         []string
+	FlagsPrefixes         []string
+}
+
 type ArgoCDSemanticSpec struct {
 	Verb          string
 	VerbIn        []string
@@ -385,6 +499,73 @@ type ArgoCDSemanticSpec struct {
 	Revision      string
 	FlagsContains []string
 	FlagsPrefixes []string
+}
+
+type DockerSemanticSpec struct {
+	Verb                 string
+	VerbIn               []string
+	Subverb              string
+	SubverbIn            []string
+	ComposeCommand       string
+	ComposeCommandIn     []string
+	Image                string
+	ImageIn              []string
+	Container            string
+	Service              string
+	Context              string
+	ContextIn            []string
+	Host                 string
+	HostPrefix           string
+	File                 string
+	FileIn               []string
+	FilePrefix           string
+	ProjectName          string
+	ProjectNameIn        []string
+	Profile              string
+	ProfileIn            []string
+	DryRun               *bool
+	Detach               *bool
+	Interactive          *bool
+	Tty                  *bool
+	RM                   *bool
+	Force                *bool
+	Privileged           *bool
+	User                 string
+	Workdir              string
+	Entrypoint           string
+	Network              string
+	NetworkHost          *bool
+	PID                  string
+	PIDHost              *bool
+	IPC                  string
+	IPCHost              *bool
+	UTS                  string
+	UTSHost              *bool
+	CapAddContains       []string
+	CapDropContains      []string
+	SecurityOptContains  []string
+	Device               *bool
+	DevicesContains      []string
+	MountsContains       []string
+	VolumesContains      []string
+	HostMount            *bool
+	RootMount            *bool
+	DockerSocketMount    *bool
+	EnvFilesContains     []string
+	EnvKeysContains      []string
+	PortsContains        []string
+	PublishAll           *bool
+	Pull                 string
+	NoCache              *bool
+	BuildArgKeysContains []string
+	Platform             string
+	All                  *bool
+	VolumesFlag          *bool
+	Prune                *bool
+	AllResources         *bool
+	RemoveOrphans        *bool
+	FlagsContains        []string
+	FlagsPrefixes        []string
 }
 
 type TerraformSemanticSpec struct {
@@ -505,10 +686,53 @@ func (s SemanticMatchSpec) Helmfile() HelmfileSemanticSpec {
 	}
 }
 
+func (s SemanticMatchSpec) Helm() HelmSemanticSpec {
+	return HelmSemanticSpec{
+		Verb: s.Verb, VerbIn: s.VerbIn, Subverb: s.Subverb, SubverbIn: s.SubverbIn,
+		Release: s.Release, Chart: s.Chart, ChartIn: s.ChartIn,
+		Namespace: s.Namespace, NamespaceIn: s.NamespaceIn, NamespaceMissing: s.NamespaceMissing,
+		KubeContext: s.KubeContext, KubeContextIn: s.KubeContextIn, KubeContextMissing: s.KubeContextMissing,
+		Kubeconfig: s.Kubeconfig, DryRun: s.DryRun, Force: s.Force, Atomic: s.Atomic,
+		Wait: s.Wait, WaitForJobs: s.WaitForJobs, Install: s.Install, ReuseValues: s.ReuseValues,
+		ResetValues: s.ResetValues, ResetThenReuseValues: s.ResetThenReuseValues,
+		CleanupOnFail: s.CleanupOnFail, CreateNamespace: s.CreateNamespace,
+		DependencyUpdate: s.DependencyUpdate, Devel: s.Devel, KeepHistory: s.KeepHistory,
+		Cascade: s.Cascade, CascadeIn: s.CascadeIn, ValuesFile: s.ValuesFile, ValuesFileIn: s.ValuesFileIn,
+		ValuesFilesContains: s.ValuesFilesContains, SetKeysContains: s.SetKeysContains,
+		SetStringKeysContains: s.SetStringKeysContains, SetFileKeysContains: s.SetFileKeysContains,
+		RepoName: s.RepoName, RepoURL: s.RepoURL, Registry: s.Registry, PluginName: s.PluginName,
+		FlagsContains: s.FlagsContains, FlagsPrefixes: s.FlagsPrefixes,
+	}
+}
+
 func (s SemanticMatchSpec) ArgoCD() ArgoCDSemanticSpec {
 	return ArgoCDSemanticSpec{
 		Verb: s.Verb, VerbIn: s.VerbIn, AppName: s.AppName, AppNameIn: s.AppNameIn,
 		Project: s.Project, ProjectIn: s.ProjectIn, Revision: s.Revision,
+		FlagsContains: s.FlagsContains, FlagsPrefixes: s.FlagsPrefixes,
+	}
+}
+
+func (s SemanticMatchSpec) Docker() DockerSemanticSpec {
+	return DockerSemanticSpec{
+		Verb: s.Verb, VerbIn: s.VerbIn, Subverb: s.Subverb, SubverbIn: s.SubverbIn,
+		ComposeCommand: s.ComposeCommand, ComposeCommandIn: s.ComposeCommandIn,
+		Image: s.Image, ImageIn: s.ImageIn, Container: s.Container, Service: s.Service,
+		Context: s.Context, ContextIn: s.ContextIn, Host: s.Host, HostPrefix: s.HostPrefix,
+		File: s.File, FileIn: s.FileIn, FilePrefix: s.FilePrefix,
+		ProjectName: s.ProjectName, ProjectNameIn: s.ProjectNameIn, Profile: s.Profile, ProfileIn: s.ProfileIn,
+		DryRun: s.DryRun, Detach: s.Detach, Interactive: s.Interactive, Tty: s.Tty,
+		RM: s.RM, Force: s.Force, Privileged: s.Privileged, User: s.User, Workdir: s.Workdir,
+		Entrypoint: s.Entrypoint, Network: s.Network, NetworkHost: s.NetworkHost, PID: s.PID,
+		PIDHost: s.PIDHost, IPC: s.IPC, IPCHost: s.IPCHost, UTS: s.UTS, UTSHost: s.UTSHost,
+		CapAddContains: s.CapAddContains, CapDropContains: s.CapDropContains, SecurityOptContains: s.SecurityOptContains,
+		Device: s.Device, DevicesContains: s.DevicesContains, MountsContains: s.MountsContains,
+		VolumesContains: s.VolumesContains, HostMount: s.HostMount, RootMount: s.RootMount,
+		DockerSocketMount: s.DockerSocketMount, EnvFilesContains: s.EnvFilesContains,
+		EnvKeysContains: s.EnvKeysContains, PortsContains: s.PortsContains, PublishAll: s.PublishAll,
+		Pull: s.Pull, NoCache: s.NoCache, BuildArgKeysContains: s.BuildArgKeysContains,
+		Platform: s.Platform, All: s.All, VolumesFlag: s.VolumesFlag,
+		Prune: s.Prune, AllResources: s.AllResources, RemoveOrphans: s.RemoveOrphans,
 		FlagsContains: s.FlagsContains, FlagsPrefixes: s.FlagsPrefixes,
 	}
 }

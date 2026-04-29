@@ -6,6 +6,14 @@ import (
 	commandpkg "github.com/tasuku43/cc-bash-guard/internal/domain/command"
 )
 
+func init() {
+	registerSemanticHandler(semanticHandler{
+		command:  "aws",
+		match:    func(s SemanticMatchSpec, cmd commandpkg.Command) bool { return s.AWS().matches(cmd) },
+		validate: ValidateAWSSemanticMatchSpec,
+	})
+}
+
 func (s AWSSemanticSpec) matches(cmd commandpkg.Command) bool {
 	if cmd.SemanticParser != "aws" || cmd.AWS == nil {
 		return false

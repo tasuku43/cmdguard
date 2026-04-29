@@ -2,6 +2,7 @@ package semantic
 
 var ghSchema = Schema{
 	Command:     "gh",
+	order:       40,
 	Description: "GitHub CLI api, pr, issue, repo, release, secret, search, workflow, auth, and run operations.",
 	Parser:      "gh",
 	Fields: []Field{
@@ -77,4 +78,8 @@ var ghSchema = Schema{
           area: api
           method_in: [POST, PATCH, PUT, DELETE]`},
 	},
+}
+
+func init() {
+	RegisterSchema(ghSchema)
 }

@@ -2,6 +2,7 @@ package semantic
 
 var terraformSchema = Schema{
 	Command:     "terraform",
+	order:       80,
 	Description: "Terraform subcommands, workspace/state subcommands, and high-risk infrastructure flags.",
 	Parser:      "terraform",
 	Fields: []Field{
@@ -58,4 +59,8 @@ var terraformSchema = Schema{
           subcommand: destroy
           auto_approve: true`},
 	},
+}
+
+func init() {
+	RegisterSchema(terraformSchema)
 }

@@ -4,6 +4,14 @@ import (
 	commandpkg "github.com/tasuku43/cc-bash-guard/internal/domain/command"
 )
 
+func init() {
+	registerSemanticHandler(semanticHandler{
+		command:  "git",
+		match:    func(s SemanticMatchSpec, cmd commandpkg.Command) bool { return s.Git().matches(cmd) },
+		validate: ValidateGitSemanticMatchSpec,
+	})
+}
+
 func (s GitSemanticSpec) matches(cmd commandpkg.Command) bool {
 	if cmd.SemanticParser != "git" || cmd.Git == nil {
 		return false

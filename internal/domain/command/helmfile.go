@@ -4,6 +4,10 @@ import "strings"
 
 type HelmfileParser struct{}
 
+func init() {
+	RegisterDefaultParser(HelmfileParser{})
+}
+
 func (HelmfileParser) Program() string {
 	return "helmfile"
 }

@@ -1,0 +1,67 @@
+permission:
+  allow:
+    - name: helm read-only
+      command:
+        name: helm
+        semantic:
+          verb_in:
+            - list
+            - status
+            - history
+            - get
+            - show
+            - search
+            - template
+            - lint
+      test:
+        allow:
+          - "helm list -n default"
+          - "helm status my-release -n default"
+          - "helm get values my-release -n default"
+          - "helm template my-release ./chart"
+        abstain:
+          - "helm upgrade my-release ./chart -n default"
+
+  ask:
+    - name: helm upgrade/install
+      command:
+        name: helm
+        semantic:
+          verb_in:
+            - install
+            - upgrade
+      test:
+        ask:
+          - "helm upgrade my-release ./chart -n default"
+          - "helm install my-release ./chart -n default"
+        abstain:
+          - "helm status my-release -n default"
+
+    - name: helm plugin changes
+      command:
+        name: helm
+        semantic:
+          verb: plugin
+          subverb_in:
+            - install
+            - update
+            - uninstall
+      test:
+        ask:
+          - "helm plugin install https://example.com/plugin.git"
+          - "helm plugin update example"
+          - "helm plugin uninstall example"
+        abstain:
+          - "helm plugin list"
+
+  deny:
+    - name: helm uninstall release
+      command:
+        name: helm
+        semantic:
+          verb: uninstall
+      test:
+        deny:
+          - "helm uninstall my-release -n default"
+        abstain:
+          - "helm status my-release -n default"

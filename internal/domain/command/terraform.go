@@ -7,6 +7,10 @@ import (
 
 type TerraformParser struct{}
 
+func init() {
+	RegisterDefaultParser(TerraformParser{})
+}
+
 func (TerraformParser) Program() string {
 	return "terraform"
 }

@@ -1,0 +1,48 @@
+permission:
+  allow:
+    - name: docker compose prod read-only
+      command:
+        name: docker
+        semantic:
+          verb: compose
+          compose_command_in:
+            - ps
+            - logs
+            - config
+            - images
+            - ls
+          file: docker-compose.prod.yml
+          project_name: prod
+      test:
+        allow:
+          - "docker compose -f docker-compose.prod.yml -p prod ps"
+          - "docker compose -f docker-compose.prod.yml -p prod logs web"
+        abstain:
+          - "docker compose -f docker-compose.dev.yml -p dev ps"
+
+  ask:
+    - name: docker compose start work
+      command:
+        name: docker
+        semantic:
+          verb: compose
+          compose_command_in:
+            - up
+            - run
+            - exec
+      test:
+        ask:
+          - "docker compose up -d"
+          - "docker compose exec web sh"
+
+  deny:
+    - name: docker compose remove volumes
+      command:
+        name: docker
+        semantic:
+          verb: compose
+          compose_command: down
+          volumes_flag: true
+      test:
+        deny:
+          - "docker compose down --volumes --remove-orphans"

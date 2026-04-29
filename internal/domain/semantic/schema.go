@@ -8,6 +8,7 @@ type Schema struct {
 	Fields       []Field   `json:"fields"`
 	Examples     []Example `json:"examples"`
 	Notes        []string  `json:"notes,omitempty"`
+	order        int
 }
 
 type Field struct {
@@ -23,15 +24,13 @@ type Example struct {
 	YAML  string `json:"yaml"`
 }
 
-var schemas = []Schema{
-	gitSchema,
-	awsSchema,
-	kubectlSchema,
-	ghSchema,
-	argoCDSchema,
-	gwsSchema,
-	helmfileSchema,
-	terraformSchema,
+var schemas []Schema
+
+func RegisterSchema(schema Schema) {
+	if schema.Command == "" {
+		return
+	}
+	schemas = append(schemas, schema)
 }
 
 func AllSchemas() []Schema {
@@ -39,6 +38,7 @@ func AllSchemas() []Schema {
 	for _, schema := range schemas {
 		out = append(out, withSemanticPath(schema))
 	}
+	sortSchemas(out)
 	return out
 }
 
@@ -60,8 +60,9 @@ func SchemasByCommand() map[string]Schema {
 }
 
 func SupportedCommands() []string {
-	commands := make([]string, 0, len(schemas))
-	for _, schema := range schemas {
+	all := AllSchemas()
+	commands := make([]string, 0, len(all))
+	for _, schema := range all {
 		commands = append(commands, schema.Command)
 	}
 	return commands
@@ -91,6 +92,21 @@ func IsFieldSupported(command, field string) bool {
 func withSemanticPath(schema Schema) Schema {
 	schema.SemanticPath = "command.semantic"
 	return schema
+}
+
+func sortSchemas(values []Schema) {
+	for i := 1; i < len(values); i++ {
+		for j := i; j > 0 && schemaLess(values[j], values[j-1]); j-- {
+			values[j], values[j-1] = values[j-1], values[j]
+		}
+	}
+}
+
+func schemaLess(a, b Schema) bool {
+	if a.order != b.order {
+		return a.order < b.order
+	}
+	return a.Command < b.Command
 }
 
 func stringField(name, description string) Field {

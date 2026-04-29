@@ -2,6 +2,7 @@ package semantic
 
 var helmfileSchema = Schema{
 	Command:     "helmfile",
+	order:       70,
 	Description: "Helmfile apply, sync, destroy, diff, environment, file, selector, namespace, and values matching.",
 	Parser:      "helmfile",
 	Fields: []Field{
@@ -52,4 +53,8 @@ var helmfileSchema = Schema{
           verb: destroy
           environment: prod`},
 	},
+}
+
+func init() {
+	RegisterSchema(helmfileSchema)
 }

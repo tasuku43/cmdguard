@@ -4,6 +4,10 @@ import "strings"
 
 type GhParser struct{}
 
+func init() {
+	RegisterDefaultParser(GhParser{})
+}
+
 func (GhParser) Program() string {
 	return "gh"
 }

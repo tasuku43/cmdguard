@@ -2,6 +2,7 @@ package semantic
 
 var gwsSchema = Schema{
 	Command:     "gws",
+	order:       60,
 	Description: "Google Workspace CLI dynamic Discovery and helper commands.",
 	Parser:      "gws",
 	Fields: []Field{
@@ -40,4 +41,8 @@ var gwsSchema = Schema{
 		"`gws` dynamically builds much of its command surface from Google Discovery Service, so this schema exposes generic service/resource_path/method fields instead of a closed list of API methods.",
 		"`mutating`, `destructive`, and `read_only` are conservative method-name inferences; use explicit service, resource_path, and method fields for tighter policies.",
 	},
+}
+
+func init() {
+	RegisterSchema(gwsSchema)
 }

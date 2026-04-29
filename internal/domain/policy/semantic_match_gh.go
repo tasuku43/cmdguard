@@ -6,6 +6,14 @@ import (
 	commandpkg "github.com/tasuku43/cc-bash-guard/internal/domain/command"
 )
 
+func init() {
+	registerSemanticHandler(semanticHandler{
+		command:  "gh",
+		match:    func(s SemanticMatchSpec, cmd commandpkg.Command) bool { return s.GH().matches(cmd) },
+		validate: ValidateGhSemanticMatchSpec,
+	})
+}
+
 func (s GHSemanticSpec) matches(cmd commandpkg.Command) bool {
 	if cmd.SemanticParser != "gh" || cmd.Gh == nil {
 		return false

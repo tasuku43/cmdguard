@@ -2,6 +2,7 @@ package semantic
 
 var argoCDSchema = Schema{
 	Command:     "argocd",
+	order:       50,
 	Description: "Argo CD app operations such as app get, list, diff, sync, rollback, and delete.",
 	Parser:      "argocd",
 	Fields: []Field{
@@ -23,4 +24,8 @@ var argoCDSchema = Schema{
         semantic:
           verb: app sync`},
 	},
+}
+
+func init() {
+	RegisterSchema(argoCDSchema)
 }

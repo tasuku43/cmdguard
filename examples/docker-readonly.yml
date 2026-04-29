@@ -1,0 +1,21 @@
+permission:
+  allow:
+    - name: docker read-only
+      command:
+        name: docker
+        semantic:
+          verb_in:
+            - ps
+            - images
+            - inspect
+            - logs
+            - version
+            - info
+      test:
+        allow:
+          - "docker ps"
+          - "docker images"
+          - "docker inspect my-container"
+          - "docker logs my-container"
+        abstain:
+          - "docker run --privileged alpine"

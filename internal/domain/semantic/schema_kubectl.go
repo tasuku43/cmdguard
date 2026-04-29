@@ -2,6 +2,7 @@ package semantic
 
 var kubectlSchema = Schema{
 	Command:     "kubectl",
+	order:       30,
 	Description: "Kubernetes verb, resource, namespace, context, filename, selector, and container matching.",
 	Parser:      "kubectl",
 	Fields: []Field{
@@ -43,4 +44,8 @@ var kubectlSchema = Schema{
           verb: delete
           namespace: prod`},
 	},
+}
+
+func init() {
+	RegisterSchema(kubectlSchema)
 }

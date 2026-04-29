@@ -23,6 +23,15 @@ type CommandParserRegistry struct {
 	parsers map[string]CommandParser
 }
 
+var defaultParsers []CommandParser
+
+func RegisterDefaultParser(parser CommandParser) {
+	if parser == nil || parser.Program() == "" {
+		return
+	}
+	defaultParsers = append(defaultParsers, parser)
+}
+
 func NewInvocation(raw string) Invocation {
 	parsed := invocation.Parse(raw)
 	return Invocation{
@@ -35,7 +44,7 @@ func NewInvocation(raw string) Invocation {
 }
 
 func DefaultParserRegistry() *CommandParserRegistry {
-	return NewCommandParserRegistry(GitParser{}, AwsParser{}, KubectlParser{}, GhParser{}, GwsParser{}, HelmfileParser{}, ArgoCDParser{}, TerraformParser{})
+	return NewCommandParserRegistry(defaultParsers...)
 }
 
 func NewCommandParserRegistry(parsers ...CommandParser) *CommandParserRegistry {

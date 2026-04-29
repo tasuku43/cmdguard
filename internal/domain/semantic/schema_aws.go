@@ -2,6 +2,7 @@ package semantic
 
 var awsSchema = Schema{
 	Command:     "aws",
+	order:       20,
 	Description: "AWS CLI service, operation, profile, region, endpoint, and dry-run matching.",
 	Parser:      "aws",
 	Fields: []Field{
@@ -28,4 +29,8 @@ var awsSchema = Schema{
         semantic:
           service: iam`},
 	},
+}
+
+func init() {
+	RegisterSchema(awsSchema)
 }

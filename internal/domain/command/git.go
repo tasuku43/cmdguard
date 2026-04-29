@@ -4,6 +4,10 @@ import "strings"
 
 type GitParser struct{}
 
+func init() {
+	RegisterDefaultParser(GitParser{})
+}
+
 func (GitParser) Program() string {
 	return "git"
 }

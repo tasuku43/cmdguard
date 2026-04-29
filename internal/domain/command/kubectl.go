@@ -4,6 +4,10 @@ import "strings"
 
 type KubectlParser struct{}
 
+func init() {
+	RegisterDefaultParser(KubectlParser{})
+}
+
 func (KubectlParser) Program() string {
 	return "kubectl"
 }

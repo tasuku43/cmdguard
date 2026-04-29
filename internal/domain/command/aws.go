@@ -4,6 +4,10 @@ import "strings"
 
 type AwsParser struct{}
 
+func init() {
+	RegisterDefaultParser(AwsParser{})
+}
+
 func (AwsParser) Program() string {
 	return "aws"
 }

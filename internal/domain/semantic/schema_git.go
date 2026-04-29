@@ -2,6 +2,7 @@ package semantic
 
 var gitSchema = Schema{
 	Command:     "git",
+	order:       10,
 	Description: "Git operations such as push, clean, reset, diff, checkout, switch, and status.",
 	Parser:      "git",
 	Fields: []Field{
@@ -37,4 +38,8 @@ var gitSchema = Schema{
 		"`force`, `force_with_lease`, and `force_if_includes` are separate git push fields; use all three when a policy should cover every force-like push syntax.",
 		"`flags_contains` and `flags_prefixes` inspect parser-recognized option tokens, not raw argv words. GenericParser fallback never satisfies semantic flags.",
 	},
+}
+
+func init() {
+	RegisterSchema(gitSchema)
 }

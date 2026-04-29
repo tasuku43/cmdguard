@@ -4,6 +4,10 @@ import "strings"
 
 type GwsParser struct{}
 
+func init() {
+	RegisterDefaultParser(GwsParser{})
+}
+
 func (GwsParser) Program() string {
 	return "gws"
 }
