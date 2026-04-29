@@ -170,12 +170,11 @@ permission:
         - "^terraform\\s+(plan|show)(\\s|$)[^;&|`$()]*$"
 
 test:
-  - in: "terraform plan -out=tfplan"
-    decision: allow
-  - in: "terraform apply -auto-approve"
-    decision: ask
-  - in: "terraform plan; terraform apply -auto-approve"
-    decision: ask
+  allow:
+    - "terraform plan -out=tfplan"
+  ask:
+    - "terraform apply -auto-approve"
+    - "terraform plan; terraform apply -auto-approve"
 ```
 
 ## AWS Profile Style

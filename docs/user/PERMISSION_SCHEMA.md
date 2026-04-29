@@ -5,7 +5,6 @@ Permission policy is grouped into `deny`, `ask`, and `allow` buckets.
 ```yaml
 include:
   - ./policies/git.yml
-  - ./tests/git.yml
 
 permission:
   deny: []
@@ -15,14 +14,15 @@ permission:
 
 ## include
 
-Top-level `include` lets you split permission rules and E2E tests across
-multiple local YAML files.
+Top-level `include` lets you split permission rules across multiple local YAML
+files. Keep rule-local tests next to the rules they describe; put top-level
+E2E tests in the root file or another included file only when that split helps
+review.
 
 ```yaml
 include:
   - ./policies/git.yml
   - ./policies/aws.yml
-  - ./tests/git.yml
 ```
 
 Rules:
@@ -219,12 +219,11 @@ permission:
         - "^terraform\\s+(plan|show)(\\s|$)[^;&|`$()]*$"
 
 test:
-  - in: "terraform plan -out=tfplan"
-    decision: allow
-  - in: "terraform apply -auto-approve"
-    decision: ask
-  - in: "terraform plan; terraform apply -auto-approve"
-    decision: ask
+  allow:
+    - "terraform plan -out=tfplan"
+  ask:
+    - "terraform apply -auto-approve"
+    - "terraform plan; terraform apply -auto-approve"
 ```
 
 ## Valid Combinations

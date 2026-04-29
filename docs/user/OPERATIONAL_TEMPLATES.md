@@ -182,9 +182,6 @@ Recommended layout:
   policies/
     git.yml
     infra.yml
-  tests/
-    git.yml
-    infra.yml
 ```
 
 Root config:
@@ -193,13 +190,11 @@ Root config:
 include:
   - ./policies/git.yml
   - ./policies/infra.yml
-  - ./tests/git.yml
-  - ./tests/infra.yml
 ```
 
-Use rule-local tests to prove the rule's direct behavior, and top-level tests
-to prove end-to-end decisions after deny, ask, allow, Claude settings, and
-fallback behavior are merged.
+Keep rule-local tests in the same file as the rules they describe. Use
+top-level tests in the root config to prove end-to-end decisions after deny,
+ask, allow, Claude settings, and fallback behavior are merged.
 
 Review process:
 

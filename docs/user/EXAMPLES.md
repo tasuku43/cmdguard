@@ -48,8 +48,6 @@ Root config:
 include:
   - ./policies/git.yml
   - ./policies/aws.yml
-  - ./tests/git.yml
-  - ./tests/aws.yml
 
 permission:
   ask:
@@ -61,6 +59,12 @@ permission:
           - "helm upgrade app chart"
         abstain:
           - "helmfile diff"
+
+test:
+  allow:
+    - "git status"
+  ask:
+    - "git push --force origin main"
 ```
 
 `./policies/git.yml`:
@@ -82,16 +86,6 @@ permission:
           - "git status"
         abstain:
           - "git push origin main"
-```
-
-`./tests/git.yml`:
-
-```yaml
-test:
-  - in: "git status"
-    decision: allow
-  - in: "git push --force origin main"
-    decision: ask
 ```
 
 Relative include paths are resolved from the file that declares them. Included
@@ -339,14 +333,12 @@ permission:
           - "terraform apply -auto-approve"
 
 test:
-  - in: "terraform plan -out=tfplan"
-    decision: allow
-  - in: "terraform show tfplan"
-    decision: allow
-  - in: "terraform apply -auto-approve"
-    decision: ask
-  - in: "terraform plan; terraform apply -auto-approve"
-    decision: ask
+  allow:
+    - "terraform plan -out=tfplan"
+    - "terraform show tfplan"
+  ask:
+    - "terraform apply -auto-approve"
+    - "terraform plan; terraform apply -auto-approve"
 ```
 
 Avoid broad allow rules such as `.*`, `^terraform\\s+`, or `^npm\\s+`. They can
