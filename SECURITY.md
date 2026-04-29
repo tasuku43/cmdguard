@@ -4,10 +4,12 @@
 
 Please do not open public issues for unpatched vulnerabilities.
 
-GitHub private vulnerability reporting is currently not enabled for this
-repository. TODO: enable GitHub private vulnerability reporting, or publish a
-dedicated private maintainer contact address here before relying on this policy
-as the complete reporting path.
+Use GitHub private vulnerability reporting for this repository:
+
+https://github.com/tasuku43/cc-bash-guard/security/advisories/new
+
+Reports through this channel are visible only to repository maintainers until a
+coordinated disclosure is published.
 
 Report security issues privately to the maintainer with:
 
