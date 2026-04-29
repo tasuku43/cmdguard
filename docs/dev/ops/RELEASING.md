@@ -45,8 +45,9 @@ gh attestation verify path/to/cc-bash-guard_<tag>_<os>_<arch>.tar.gz -R tasuku43
 ```
 
 Use `task release:preflight` before pushing a tag. It runs formatting checks,
-`go vet`, `go test`, `govulncheck`, and `goreleaser check` so the GoReleaser
-configuration is validated without publishing artifacts.
+`go vet`, `go test`, Staticcheck, binary smoke tests, `govulncheck`, and
+`goreleaser check` so the GoReleaser configuration is validated without
+publishing artifacts.
 
 ## Release Invariants
 
@@ -75,6 +76,7 @@ After a release is published:
 3. run:
    - `cc-bash-guard version --format json`
    - `cc-bash-guard verify --format json`
+   - `cc-bash-guard help semantic`
 4. run `gh attestation verify` against the downloaded artifact
 5. confirm the reported VCS revision matches the intended release commit
 

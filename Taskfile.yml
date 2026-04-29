@@ -18,10 +18,20 @@ tasks:
     cmds:
       - go test ./...
 
+  test:race:
+    desc: Run the Go test suite with the race detector
+    cmds:
+      - go test -race ./...
+
   vet:
     desc: Run go vet
     cmds:
       - go vet ./...
+
+  lint:
+    desc: Run Staticcheck
+    cmds:
+      - go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
 
   vulncheck:
     desc: Run govulncheck
@@ -39,6 +49,39 @@ tasks:
         diff -u "${tmpdir}/go.mod" go.mod
         diff -u "${tmpdir}/go.sum" go.sum
 
+  smoke:
+    desc: Build a temporary binary and run basic CLI smoke tests
+    cmds:
+      - |
+        tmpdir="$(mktemp -d)"
+        trap 'rm -rf "${tmpdir}"' EXIT
+        go build -o "${tmpdir}/cc-bash-guard" ./cmd/cc-bash-guard
+        "${tmpdir}/cc-bash-guard" version
+        "${tmpdir}/cc-bash-guard" help
+        "${tmpdir}/cc-bash-guard" help semantic
+
+  security:
+    desc: Run local security checks
+    cmds:
+      - task: vulncheck
+      - task: lint
+
+  ci:
+    desc: Run local CI checks
+    cmds:
+      - |
+        unformatted="$(gofmt -l .)"
+        if [ -n "${unformatted}" ]; then
+          echo "These files are not gofmt'd:"
+          echo "${unformatted}"
+          exit 1
+        fi
+      - task: mod:tidy-check
+      - task: vet
+      - task: test
+      - task: lint
+      - task: smoke
+
   release:preflight:
     desc: Run pre-release verification checks
     cmds:
@@ -52,6 +95,8 @@ tasks:
       - task: mod:tidy-check
       - task: vet
       - task: test
+      - task: lint
+      - task: smoke
       - task: vulncheck
       - go run github.com/goreleaser/goreleaser/v2@v2.12.7 check
 
