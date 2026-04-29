@@ -43,8 +43,10 @@ Bash execution. Default policy evaluation does not rewrite commands; `hook
 --rtk` is the explicit bridge to external RTK rewriting.
 
 The automated workflow currently builds archives with GoReleaser, publishes
-`checksums.txt`, and calls `actions/attest` for the archives listed in
-`dist/checksums.txt` and for `dist/checksums.txt` itself. For releases that
+`checksums.txt`, verifies generated artifacts against `dist/checksums.txt`, and
+calls `actions/attest` for the archives listed in `dist/checksums.txt` and for
+`dist/checksums.txt` itself. Release builds also set version, commit, and build
+date metadata for `cc-bash-guard version --format json`. For releases that
 include GitHub Artifact Attestations, consumers can verify provenance with:
 
 ```sh
@@ -71,9 +73,10 @@ current workflow behavior is:
 3. GoReleaser builds macOS and Linux archives for `amd64` and `arm64`
    (`amd64` archives are named `x64`)
 4. GoReleaser publishes `checksums.txt`
-5. `actions/attest` generates provenance attestations for archives listed in
+5. the workflow runs `sha256sum -c checksums.txt` inside `dist`
+6. `actions/attest` generates provenance attestations for archives listed in
    `dist/checksums.txt` and for `dist/checksums.txt`
-6. stable tags without prerelease suffixes attempt the Homebrew tap PR path
+7. stable tags without prerelease suffixes attempt the Homebrew tap PR path
 
 The intended health criteria for a release are:
 

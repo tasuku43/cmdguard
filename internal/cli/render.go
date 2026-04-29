@@ -245,6 +245,9 @@ func writeVersionText(w io.Writer, result app.VersionResult) {
 	if result.Info.VCSTime != "" {
 		fmt.Fprintf(w, "vcs.time: %s\n", result.Info.VCSTime)
 	}
+	if result.Info.BuildDate != "" {
+		fmt.Fprintf(w, "build.date: %s\n", result.Info.BuildDate)
+	}
 	if result.Info.VCSModified != "" {
 		fmt.Fprintf(w, "vcs.modified: %s\n", result.Info.VCSModified)
 	}

@@ -4,6 +4,11 @@
 
 Please do not open public issues for unpatched vulnerabilities.
 
+GitHub private vulnerability reporting is currently not enabled for this
+repository. TODO: enable GitHub private vulnerability reporting, or publish a
+dedicated private maintainer contact address here before relying on this policy
+as the complete reporting path.
+
 Report security issues privately to the maintainer with:
 
 - impact summary

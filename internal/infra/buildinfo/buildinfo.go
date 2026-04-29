@@ -2,6 +2,12 @@ package buildinfo
 
 import "runtime/debug"
 
+var (
+	version = ""
+	commit  = ""
+	date    = ""
+)
+
 type Info struct {
 	Version     string `json:"version"`
 	Module      string `json:"module"`
@@ -9,6 +15,7 @@ type Info struct {
 	VCSRevision string `json:"vcs_revision,omitempty"`
 	VCSTime     string `json:"vcs_time,omitempty"`
 	VCSModified string `json:"vcs_modified,omitempty"`
+	BuildDate   string `json:"build_date,omitempty"`
 }
 
 func Read() Info {
@@ -35,6 +42,16 @@ func Read() Info {
 				info.VCSModified = s.Value
 			}
 		}
+	}
+
+	if version != "" {
+		info.Version = version
+	}
+	if commit != "" {
+		info.VCSRevision = commit
+	}
+	if date != "" {
+		info.BuildDate = date
 	}
 
 	return info

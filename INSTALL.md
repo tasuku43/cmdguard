@@ -32,10 +32,12 @@ Recommended user verification:
 - Verify the archive against the release `checksums.txt`.
 - For releases that include GitHub artifact attestations, verify the downloaded
   archive and `checksums.txt` with `gh attestation verify`.
+- Confirm the expected repository identity is `tasuku43/cc-bash-guard`.
 - Inspect the installed binary with `cc-bash-guard version --format json`.
-- Run `cc-bash-guard verify --format json` against your effective policy.
+- Run `cc-bash-guard verify --format json` against your effective policy after
+  every install or upgrade.
 - Treat checksums and attestations as integrity and provenance signals, not as
-  proof that the source code or runtime behavior is safe.
+  proof that the source code, policy engine, or runtime behavior is safe.
 
 ## Homebrew
 
@@ -79,6 +81,26 @@ curl -LO "https://github.com/tasuku43/cc-bash-guard/releases/download/${TAG}/che
 
 ## Verify What You Install
 
+`cc-bash-guard` is part of your shell execution trust boundary. The installed
+binary makes allow, ask, and deny decisions before shell commands run, so
+release verification is about deciding whether this exact executable belongs in
+that boundary.
+
+Checksum verification confirms that the downloaded archive matches the digest
+published in the release `checksums.txt` file. It detects download corruption or
+an archive that does not match that checksum file. Checksums alone do not
+independently prove source provenance: if you have not also decided to trust the
+release page, repository, tag, and checksum file, a matching checksum is not a
+complete trust decision.
+
+GitHub artifact attestations provide provenance signals for releases that
+publish them. For this project, verify against the expected repository identity
+`tasuku43/cc-bash-guard`. A successful attestation check can show that GitHub
+has provenance for the artifact associated with this repository's release
+process. It does not prove runtime behavior is safe, does not prove the policy
+engine is bug-free, and does not replace reviewing the code, release workflow,
+or your local policy.
+
 Verify the SHA-256 checksum before installing:
 
 ```sh
@@ -119,15 +141,20 @@ release tag or commit you intended to install. Missing VCS metadata should be
 treated as a reason to inspect the build path more carefully, not as proof of a
 bad build.
 
-Release verification checklist:
+Install trust boundary checklist:
 
-1. download the platform archive
-2. download `checksums.txt`
-3. verify the archive SHA-256 against `checksums.txt`
-4. verify GitHub artifact attestations when present
-5. install the binary and run `cc-bash-guard version --format json`
-6. run `cc-bash-guard verify --format json`
-7. confirm the reported VCS revision or tag when the version output exposes it
+1. Choose the release tag intentionally; avoid installing a tag only because it
+   is the newest one.
+2. Download the platform archive and `checksums.txt` from the same GitHub
+   Release.
+3. Verify the archive SHA-256 against `checksums.txt`.
+4. Verify GitHub artifact attestations when they are available, using
+   `tasuku43/cc-bash-guard` as the expected repository identity.
+5. Install the binary and inspect `cc-bash-guard version --format json`.
+6. Run `cc-bash-guard verify --format json` after install or upgrade.
+7. Treat Homebrew tap, mise plugin behavior, and source builds as part of the
+   trust decision. They are alternate delivery or build paths, not inherently
+   safer than verified GitHub Release artifacts.
 
 ## Build From Source
 

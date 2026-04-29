@@ -20,6 +20,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
+      - -X github.com/tasuku43/cc-bash-guard/internal/infra/buildinfo.version={{ .Version }}
+      - -X github.com/tasuku43/cc-bash-guard/internal/infra/buildinfo.commit={{ .Commit }}
+      - -X github.com/tasuku43/cc-bash-guard/internal/infra/buildinfo.date={{ .Date }}
 
 archives:
   - id: archives
