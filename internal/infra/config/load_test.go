@@ -1039,6 +1039,52 @@ test:
 	}
 }
 
+func TestLoadEffectiveForHookToolRejectsChangedIncludedFile(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	cacheHome := t.TempDir()
+	configPath := filepath.Join(home, ".config", "cc-bash-guard", "cc-bash-guard.yml")
+	includePath := filepath.Join(home, ".config", "cc-bash-guard", "policies", "git.yml")
+	writeFile(t, includePath, `permission:
+  allow:
+    - command:
+        name: git
+        semantic:
+          verb: status
+      test:
+        allow: ["git status"]
+        abstain: ["git diff"]
+`)
+	writeFile(t, configPath, `include:
+  - ./policies/git.yml
+`)
+	if _, err := VerifyEffectiveToAllCaches(cwd, home, "", cacheHome, "claude", "vtest"); err != nil {
+		t.Fatalf("VerifyEffectiveToAllCaches() error = %v", err)
+	}
+	loaded := LoadEffectiveForHookTool(cwd, home, "", cacheHome, "claude")
+	if len(loaded.Errors) != 0 {
+		t.Fatalf("hook errors before include change = %v", loaded.Errors)
+	}
+
+	writeFile(t, includePath, `permission:
+  allow:
+    - command:
+        name: git
+        semantic:
+          verb: diff
+      test:
+        allow: ["git diff"]
+        abstain: ["git status"]
+`)
+	loaded = LoadEffectiveForHookTool(cwd, home, "", cacheHome, "claude")
+	if len(loaded.Errors) == 0 {
+		t.Fatal("expected changed included file to invalidate effective artifact")
+	}
+	if !strings.Contains(loaded.Errors[0].Error(), "changed since last verify") {
+		t.Fatalf("unexpected error: %v", loaded.Errors[0])
+	}
+}
+
 func TestLoadEffectiveForHookToolRejectsMismatchedEvaluationSemantics(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()

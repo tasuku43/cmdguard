@@ -768,6 +768,9 @@ func loadEffectiveEvalCache(cachePath string, inputs EffectiveInputs) (policy.Pi
 	if cache.Version != 2 || cache.Tool != inputs.Tool || cache.Fingerprint != inputs.Fingerprint || strings.TrimSpace(cache.VerifiedAt) == "" {
 		return policy.Pipeline{}, false, nil
 	}
+	if !sameStrings(cache.SourcePaths, sourcePaths(inputs.ConfigFiles)) || !sameStrings(cache.SettingsPaths, inputs.SettingsPaths) {
+		return policy.Pipeline{}, false, nil
+	}
 	if cache.EvaluationSemanticsVersion != EvaluationSemanticsVersion {
 		return policy.Pipeline{}, false, incompatibleEvaluationSemanticsError(cachePath, cache.EvaluationSemanticsVersion)
 	}
@@ -1010,6 +1013,18 @@ func sourcePaths(sources []Source) []string {
 		paths = append(paths, src.Path)
 	}
 	return paths
+}
+
+func sameStrings(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func configDependencySources(sources []Source) []Source {
