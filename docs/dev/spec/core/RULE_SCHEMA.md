@@ -86,6 +86,8 @@ flags include `redirect_stream_merge`, `redirect_to_devnull`,
 
 `permission.tolerated_redirects.only` permits otherwise matching allow rules to
 remain effective when the command has only the listed redirect categories.
+The setting is global to the effective config, so it applies across included
+files after config loading merges them.
 `command.tolerated_redirects.only` is also valid in `permission.allow` rules
 when only that rule should tolerate redirects. Tolerated redirects are not match
 predicates for `deny` or `ask`, and they do not allow new commands by

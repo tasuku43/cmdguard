@@ -1843,7 +1843,10 @@ func ErrorStrings(errs []error) []string {
 }
 
 func IsZeroPermissionSpec(spec PermissionSpec) bool {
-	return len(spec.Deny) == 0 && len(spec.Ask) == 0 && len(spec.Allow) == 0
+	return len(spec.ToleratedRedirects.Only) == 0 &&
+		len(spec.Deny) == 0 &&
+		len(spec.Ask) == 0 &&
+		len(spec.Allow) == 0
 }
 
 func IsZeroPermissionCommandSpec(command PermissionCommandSpec) bool {

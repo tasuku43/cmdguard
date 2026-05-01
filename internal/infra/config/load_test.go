@@ -1291,6 +1291,68 @@ permission:
 	assertDecision(t, pipeline, "git push --force origin main", "deny")
 }
 
+func TestLoadFileIfPresentAppliesRootToleratedRedirectsToIncludedAllowRules(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "cc-bash-guard.yml")
+	writeFile(t, filepath.Join(dir, "coreutils.yml"), `permission:
+  allow:
+    - name: ls
+      command:
+        name: ls
+      test:
+        allow: ["ls"]
+        abstain: ["pwd"]
+`)
+	writeFile(t, root, `include:
+  - ./coreutils.yml
+permission:
+  tolerated_redirects:
+    only:
+      - stderr_to_devnull
+test:
+  - in: "ls argocd-helmfile/ 2>/dev/null"
+    decision: allow
+`)
+
+	pipeline, err := LoadFileIfPresent(Source{Layer: LayerUser, Path: root})
+	if err != nil {
+		t.Fatalf("LoadFileIfPresent() error = %v", err)
+	}
+	if got := pipeline.Permission.ToleratedRedirects.Only; !reflect.DeepEqual(got, []string{"stderr_to_devnull"}) {
+		t.Fatalf("tolerated redirects = %#v", got)
+	}
+	assertDecision(t, pipeline, "ls argocd-helmfile/ 2>/dev/null", "allow")
+}
+
+func TestLoadEffectiveWithSourcesAppliesGlobalToleratedRedirectsAcrossSources(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.yml")
+	second := filepath.Join(dir, "second.yml")
+	writeFile(t, first, `permission:
+  allow:
+    - name: ls
+      command:
+        name: ls
+      test:
+        allow: ["ls"]
+        abstain: ["pwd"]
+`)
+	writeFile(t, second, `permission:
+  tolerated_redirects:
+    only:
+      - stderr_to_devnull
+`)
+
+	loaded := loadEffectiveWithSources([]Source{
+		{Layer: LayerUser, Path: first},
+		{Layer: LayerProject, Path: second},
+	}, LoadFileIfPresent)
+	if len(loaded.Errors) > 0 {
+		t.Fatalf("loadEffectiveWithSources() errors = %v", loaded.Errors)
+	}
+	assertDecision(t, loaded.Pipeline, "ls argocd-helmfile/ 2>/dev/null", "allow")
+}
+
 func TestLoadFileIfPresentPreservesIncludeOrder(t *testing.T) {
 	dir := t.TempDir()
 	root := filepath.Join(dir, "cc-bash-guard.yml")

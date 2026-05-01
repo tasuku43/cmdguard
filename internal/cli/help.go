@@ -383,8 +383,9 @@ When to use each matcher:
   redirect_append_file, redirect_stdin_from_file, and redirect_heredoc.
   Use permission.tolerated_redirects.only when already allowed commands should
   remain allowed with specific harmless redirects, such as stdout_to_devnull
-  or stderr_to_devnull. Use command.tolerated_redirects.only in an allow rule
-  when only that command rule should tolerate those redirects.
+  or stderr_to_devnull. This global setting applies after includes are merged.
+  Use command.tolerated_redirects.only in an allow rule when only that command
+  rule should tolerate those redirects.
   Tolerated redirects do not allow new commands by themselves; they only relax
   fail-closed redirect handling for otherwise matching allow rules.
   Supported tolerated redirect values:

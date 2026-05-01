@@ -365,7 +365,8 @@ Redirects normally keep allow rules fail-closed. Use global
 `permission.tolerated_redirects.only` when already allowed commands should
 remain allowed with harmless redirects. This does not allow new commands by
 itself; it only relaxes redirect fail-closed behavior for otherwise matching
-allow rules.
+allow rules. The global setting applies to the effective config after includes
+are merged, including allow rules loaded from included policy files.
 
 ```yaml
 permission:

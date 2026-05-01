@@ -40,8 +40,9 @@ Rules:
   operating system resolves the path to a regular file, it is read as that file.
 
 Merge order is deterministic: `include[0]`, `include[1]`, then the current file.
-`permission.deny`, `permission.ask`, `permission.allow`, and top-level `test`
-lists are concatenated in that order. No deep merge is performed.
+`permission.tolerated_redirects.only`, `permission.deny`, `permission.ask`,
+`permission.allow`, and top-level `test` lists are concatenated in that order.
+No deep merge is performed.
 
 `cc-bash-guard verify` resolves includes and writes one effective verified
 artifact. The hook uses that artifact for permission evaluation. Included files
@@ -113,6 +114,8 @@ explicitly tolerates them.
 
 `tolerated_redirects.only` can be placed under `permission` when otherwise
 allowed commands should remain allowed with specific harmless redirects.
+This global setting applies to allow rules in the effective config, including
+rules loaded from `include` files.
 It can also be placed under `command` in `permission.allow` rules when only the
 matching allow rule should tolerate those redirects. It is not a redirect
 matcher for `deny` or `ask`; it only relaxes redirect fail-closed behavior for

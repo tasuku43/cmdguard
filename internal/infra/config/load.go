@@ -23,7 +23,7 @@ import (
 const LayerUser = "user"
 const LayerProject = "project"
 
-const EvaluationSemanticsVersion = 4
+const EvaluationSemanticsVersion = 5
 
 type File = policy.PipelineSpec
 
@@ -530,6 +530,7 @@ func stampFileSources(file File, src Source) File {
 
 func mergeSpecs(base File, next File) File {
 	base.Rewrite = append(base.Rewrite, next.Rewrite...)
+	base.Permission.ToleratedRedirects.Only = append(base.Permission.ToleratedRedirects.Only, next.Permission.ToleratedRedirects.Only...)
 	base.Permission.Deny = append(base.Permission.Deny, next.Permission.Deny...)
 	base.Permission.Ask = append(base.Permission.Ask, next.Permission.Ask...)
 	base.Permission.Allow = append(base.Permission.Allow, next.Permission.Allow...)
@@ -1080,6 +1081,7 @@ func shortHash(value string) string {
 
 func mergePipelines(base policy.Pipeline, next policy.Pipeline) policy.Pipeline {
 	base.Rewrite = append(base.Rewrite, next.Rewrite...)
+	base.Permission.ToleratedRedirects.Only = append(base.Permission.ToleratedRedirects.Only, next.Permission.ToleratedRedirects.Only...)
 	base.Permission.Deny = append(base.Permission.Deny, next.Permission.Deny...)
 	base.Permission.Ask = append(base.Permission.Ask, next.Permission.Ask...)
 	base.Permission.Allow = append(base.Permission.Allow, next.Permission.Allow...)
